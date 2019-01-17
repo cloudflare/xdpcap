@@ -11,7 +11,8 @@ import (
 // synmbol name of the hook map
 const hookMapSymbol = "xdpcap_hook"
 
-var hookMapABI = ebpf.MapABI{
+// HookMapABI is the ABI of the underlying prog map created
+var HookMapABI = ebpf.MapABI{
 	Type:      ebpf.ProgramArray,
 	KeySize:   4, // sizeof(int)
 	ValueSize: 4, // sizeof(int)
@@ -19,7 +20,7 @@ var hookMapABI = ebpf.MapABI{
 
 var collectionAbi = ebpf.CollectionABI{
 	Maps: map[string]*ebpf.MapABI{
-		hookMapSymbol: &hookMapABI,
+		hookMapSymbol: &HookMapABI,
 	},
 }
 
@@ -33,9 +34,9 @@ type Hook struct {
 func NewHook(fileName string) (*Hook, error) {
 	hookMap, err := ebpf.NewMap(&ebpf.MapSpec{
 		Name:       ebpf.SanitizeName(filepath.Base(fileName), '_'),
-		Type:       hookMapABI.Type,
-		KeySize:    hookMapABI.KeySize,
-		ValueSize:  hookMapABI.ValueSize,
+		Type:       HookMapABI.Type,
+		KeySize:    HookMapABI.KeySize,
+		ValueSize:  HookMapABI.ValueSize,
 		MaxEntries: 4, // current number of XDP actions
 	})
 	if err != nil {
