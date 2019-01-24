@@ -1,0 +1,6 @@
+github.com/newtools/ebpf v0.0.0-20190313155020-23e0debb6338 h1:68rsjPpj13mbUGhllinENb/lXUBq6dXhlRLf8ymp1oA=
+github.com/newtools/ebpf v0.0.0-20190313155020-23e0debb6338/go.mod h1:eopbi8xx7pp0S2g/ce/pgCcfR4krkn8UrC7z2M9qCHI=
+github.com/pkg/errors v0.8.1 h1:iURUrRGxPUNPdy5/HRSm+Yj6okJ6UtLINN0Q9M4+h3I=
+github.com/pkg/errors v0.8.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=
+golang.org/x/sys v0.0.0-20190322080309-f49334f85ddc h1:4gbWbmmPFp4ySWICouJl6emP0MyS31yy9SrTlAGFT+g=
+golang.org/x/sys v0.0.0-20190322080309-f49334f85ddc/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
