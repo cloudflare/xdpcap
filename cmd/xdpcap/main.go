@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"os/signal"
 	"strings"
@@ -19,13 +20,19 @@ import (
 
 func main() {
 	var (
-		perCPUBuffer = flag.Int("buffer", 8192, "Per CPU perf buffer size to create (bytes)")
-		watermark    = flag.Int("watermark", 4096, "Perf watermark (bytes)")
+		perCPUBuffer = flag.Int("buffer", 8192, "Per CPU perf buffer size to create (`bytes`)")
+		watermark    = flag.Int("watermark", 4096, "Perf watermark (`bytes`)")
+		quiet        = flag.Bool("q", false, "Don't print statistics")
 	)
 
 	flag.Usage = func() {
-		fmt.Fprintln(os.Stderr, os.Args[0], "<debug map> <pcap> [<tcpdump filter expr>]")
-		fmt.Fprintf(os.Stderr, "\nCapture packets handled by XDP (l4drop, Unimog) matching a tcpdump filter expression\n\n")
+		fmt.Fprintln(os.Stderr, os.Args[0], "<debug map> <output> [<tcpdump filter expr>]")
+		fmt.Fprintf(os.Stderr, `
+Capture packets handled by XDP (l4drop, Unimog) matching a tcpdump filter expression.
+
+<output> may be "-" to write to stdout.
+
+`)
 		flag.PrintDefaults()
 	}
 
@@ -36,8 +43,18 @@ func main() {
 		os.Exit(1)
 	}
 
-	mapFile := flag.Arg(0)
-	pcapFile := flag.Arg(1)
+	var pcapFile *os.File
+	if output := flag.Arg(1); output == "-" {
+		pcapFile = os.Stdout
+		*quiet = true
+	} else {
+		var err error
+		pcapFile, err = os.Create(output)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "Can't create output:", err)
+			os.Exit(1)
+		}
+	}
 
 	// Default filter is match anything
 	expr := ""
@@ -45,28 +62,26 @@ func main() {
 		expr = strings.Join(flag.Args()[2:], " ")
 	}
 
-	err := capture(mapFile, pcapFile, expr, FilterOpts{
+	mapFile := flag.Arg(0)
+	err := capture(mapFile, pcapFile, *quiet, expr, FilterOpts{
 		PerfPerCPUBuffer: *perCPUBuffer,
 		PerfWatermark:    *watermark,
 	})
+
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Error:", err)
 		os.Exit(1)
 	}
 }
 
-func capture(mapPath string, pcapPath string, filterExpr string, opts FilterOpts) error {
+func capture(mapPath string, pcapFile *os.File, quiet bool, filterExpr string, opts FilterOpts) error {
+	defer pcapFile.Sync()
+
 	// BPF progs, maps and the perf buffer are stored in locked memory
 	err := unlimitLockedMemory()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Error setting locked memory limit:", err)
 	}
-
-	pcapFile, err := os.Create(pcapPath)
-	if err != nil {
-		return errors.Wrap(err, "openning pcap")
-	}
-	defer pcapFile.Close()
 
 	// Exit gracefully
 	sigs := make(chan os.Signal, 1)
@@ -87,28 +102,30 @@ func capture(mapPath string, pcapPath string, filterExpr string, opts FilterOpts
 	defer pcapWriter.Flush()
 	defer filter.Close()
 
-	// Print metrics every 1 second
-	go func() {
-		ticker := time.NewTicker(time.Second)
-		defer ticker.Stop()
+	if !quiet {
+		// Print metrics every 1 second
+		go func() {
+			ticker := time.NewTicker(time.Second)
+			defer ticker.Stop()
 
-		for range ticker.C {
-			str := bytes.Buffer{}
+			for range ticker.C {
+				str := bytes.Buffer{}
 
-			metrics, err := filter.Metrics()
-			if err != nil {
-				fmt.Fprintln(os.Stderr, "Error getting metrics:", err)
-				continue
+				metrics, err := filter.Metrics()
+				if err != nil {
+					fmt.Fprintln(os.Stderr, "Error getting metrics:", err)
+					continue
+				}
+
+				for _, action := range filter.Actions() {
+					fmt.Fprintf(&str, "%v: %d/%d\t", action, metrics[action].ReceivedPackets, metrics[action].MatchedPackets)
+				}
+
+				str.WriteString("(received/matched packets)\n")
+				os.Stderr.WriteString(str.String())
 			}
-
-			for _, action := range filter.Actions() {
-				fmt.Fprintf(&str, "%v: %d/%d\t", action, metrics[action].ReceivedPackets, metrics[action].MatchedPackets)
-			}
-
-			str.WriteString("(received/matched packets)\n")
-			fmt.Print(str.String())
-		}
-	}()
+		}()
+	}
 
 	// Aggregate packets of all programs of the filter
 	packets := make(chan Packet)
@@ -149,38 +166,31 @@ func newPcapWriter(w io.Writer, filterExpr string, actions []XDPAction) (*pcapgo
 		return nil, nil, errors.New("can't create pcap with no actions")
 	}
 
-	interfaces := make(map[XDPAction]int)
+	var interfaces []pcapgo.NgInterface
+	actionIfcs := make(map[XDPAction]int)
 
-	// Seems to be the pcapgo way
-	interfaces[actions[0]] = 0
-	pcapWriter, err := pcapgo.NewNgWriterInterface(w, xdpInterface(actions[0], filterExpr), pcapgo.NgWriterOptions{})
+	for id, action := range actions {
+		interfaces = append(interfaces, pcapgo.NgInterface{
+			Name:       action.String(),
+			Comment:    "XDP action",
+			Filter:     filterExpr,
+			LinkType:   layers.LinkTypeEthernet,
+			SnapLength: uint32(math.MaxUint16),
+		})
+		actionIfcs[action] = id
+	}
+
+	pcapWriter, err := pcapgo.NewNgWriterInterface(w, interfaces[0], pcapgo.NgWriterOptions{})
 	if err != nil {
 		return nil, nil, err
 	}
 
-	if len(actions) == 1 {
-		return pcapWriter, interfaces, nil
-	}
-
-	for _, action := range actions[1:] {
-		id, err := pcapWriter.AddInterface(xdpInterface(action, filterExpr))
+	for _, ifc := range interfaces[1:] {
+		_, err := pcapWriter.AddInterface(ifc)
 		if err != nil {
 			return nil, nil, err
 		}
-
-		interfaces[action] = id
 	}
 
-	return pcapWriter, interfaces, nil
-}
-
-// xdpInterface creates a pcap interface from an xdp action
-// This allows packets in a pcap to be associated with their original XDP Action
-func xdpInterface(action XDPAction, expr string) pcapgo.NgInterface {
-	return pcapgo.NgInterface{
-		Name:     action.String(),
-		Comment:  "XDP action",
-		Filter:   expr,
-		LinkType: layers.LinkTypeEthernet,
-	}
+	return pcapWriter, actionIfcs, nil
 }
