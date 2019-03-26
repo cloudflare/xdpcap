@@ -7,5 +7,5 @@ require (
 	github.com/newtools/ebpf v0.0.0-20190313155020-23e0debb6338
 	github.com/pkg/errors v0.8.1
 	golang.org/x/net v0.0.0-20190324223953-e3b2ff56ed87
-	golang.org/x/sys v0.0.0-20190322080309-f49334f85ddc // indirect
+	golang.org/x/sys v0.0.0-20190322080309-f49334f85ddc
 )

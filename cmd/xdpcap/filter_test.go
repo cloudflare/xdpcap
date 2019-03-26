@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"os"
 	"testing"
 
 	"github.com/cloudflare/xdpcap"
@@ -13,6 +14,15 @@ import (
 var testOpts = FilterOpts{
 	PerfPerCPUBuffer: 8192,
 	PerfWatermark:    4096,
+}
+
+func TestMain(m *testing.M) {
+	err := unlimitLockedMemory()
+	if err != nil {
+		panic(err)
+	}
+
+	os.Exit(m.Run())
 }
 
 func TestEmptyExpr(t *testing.T) {
