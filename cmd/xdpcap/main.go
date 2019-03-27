@@ -56,6 +56,12 @@ func main() {
 }
 
 func capture(mapPath string, pcapPath string, filterExpr string, opts FilterOpts) error {
+	// BPF progs, maps and the perf buffer are stored in locked memory
+	err := unlimitLockedMemory()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "Error setting locked memory limit:", err)
+	}
+
 	pcapFile, err := os.Create(pcapPath)
 	if err != nil {
 		return errors.Wrap(err, "openning pcap")
