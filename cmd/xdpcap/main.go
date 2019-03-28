@@ -1,3 +1,19 @@
+// Program xdpcap produces tcpdump compatible PCAPs from a BPF map.
+//
+// You can use it to introspect traffic dropped or redirected by XDP. It
+// is also useful to examine any transformations done to a packet.
+//
+// xdpcap requires you to instrument your XDP code in a specific way,
+// check the documentation at https://github.com/cloudflare/xdpcap
+// for details.
+//
+// Once you have done so, you can capture into a file, or pipe
+// straight into tcpdump:
+//
+//     xdpcap /path/to/pinned/map file.pcap
+//     xdpcap /path/to/pinned/map - | tcpdump -r -
+//
+// xdpcap supports tcpdump / libpcap-style filter expressions.
 package main
 
 import (
