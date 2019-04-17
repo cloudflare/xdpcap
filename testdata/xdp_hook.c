@@ -19,11 +19,14 @@ int tail_call(void *ctx, void *map, int index);
 __section("license")
 char __license[] = "BSD";
 
+__section("maps")
+struct bpf_map_def xdpcap_hook = XDPCAP_HOOK();
+
 /**
  * Example / test XDP program that exposes packets through an xdpcap hook.
  */
 __section("test_hook") int xdp_hook(struct xdp_md *ctx) {
-	return xdpcap_exit(ctx, XDP_PASS);
+	return xdpcap_exit(ctx, &xdpcap_hook, XDP_PASS);
 }
 
 /**

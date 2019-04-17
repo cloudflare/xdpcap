@@ -7,7 +7,8 @@ import (
 )
 
 const (
-	elf = "testdata/xdp_hook.c.elf"
+	elf        = "testdata/xdp_hook.c.elf"
+	hookSymbol = "xdpcap_hook"
 )
 
 // Test loading an elf with a hook map
@@ -23,7 +24,7 @@ func TestHook(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = hook.Patch(spec)
+	err = hook.Patch(spec, hookSymbol)
 	if err != nil {
 		t.Fatal(err)
 	}
