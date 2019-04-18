@@ -3,17 +3,31 @@
 
 #include <linux/bpf.h>
 
-__attribute__((section("maps"), used))
-struct bpf_map_def xdpcap_hook = {
-	.type = BPF_MAP_TYPE_PROG_ARRAY,
-	.key_size = sizeof(int),
-	.value_size = sizeof(int),
-	.max_entries = 4, // Not using SET_BY_USERSPACE allows the map to be created without a xdpcap.Hook
-};
+/**
+ * Create a bpf map suitable for use as an xdpcap hook point.
+ *
+ * For example:
+ *   struct bpf_map_def xdpcap_hook = XDPCAP_HOOK();
+ */
+#define XDPCAP_HOOK() { \
+	.type = BPF_MAP_TYPE_PROG_ARRAY, \
+	.key_size = sizeof(int), \
+	.value_size = sizeof(int), \
+	.max_entries = 4, \
+}
 
+/**
+ * Return action, exposing the action and input packet to xdpcap hook.
+ *
+ *   return xdpcap_exit(ctx, &hook, XDP_PASS)
+ *
+ * is equivalent to:
+ *
+ *   return XDP_PASS;
+ */
 __attribute__((__always_inline__))
-static inline enum xdp_action xdpcap_exit(struct xdp_md *ctx, enum xdp_action action) {
-	tail_call((void *)ctx, &xdpcap_hook, action);
+static inline enum xdp_action xdpcap_exit(struct xdp_md *ctx, struct bpf_map_def *hook, enum xdp_action action) {
+	tail_call((void *)ctx, hook, action);
 	return action;
 }
 

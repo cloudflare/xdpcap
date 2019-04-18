@@ -8,9 +8,6 @@ import (
 	"github.com/pkg/errors"
 )
 
-// synmbol name of the hook map
-const hookMapSymbol = "xdpcap_hook"
-
 // HookMapABI is the ABI of the underlying prog map created
 var HookMapABI = ebpf.MapABI{
 	Type:      ebpf.ProgramArray,
@@ -18,12 +15,8 @@ var HookMapABI = ebpf.MapABI{
 	ValueSize: 4, // sizeof(int)
 }
 
-var collectionAbi = ebpf.CollectionABI{
-	Maps: map[string]*ebpf.MapABI{
-		hookMapSymbol: &HookMapABI,
-	},
-}
-
+// Hook represents an xdpcap hook point.
+// This hook can be reused with several programs.
 type Hook struct {
 	hookMap  *ebpf.Map
 	fileName string
@@ -67,8 +60,14 @@ func (h *Hook) Rm() error {
 	return errors.Wrapf(os.Remove(h.fileName), "file %s", h.fileName)
 }
 
-// Patch edits all programs in the spec that refer to a hook to use this hook
-func (h *Hook) Patch(spec *ebpf.CollectionSpec) error {
+// Patch edits all programs in the spec that refer to hookMapSymbol to use this hook
+func (h *Hook) Patch(spec *ebpf.CollectionSpec, hookMapSymbol string) error {
+	collectionAbi := ebpf.CollectionABI{
+		Maps: map[string]*ebpf.MapABI{
+			hookMapSymbol: &HookMapABI,
+		},
+	}
+
 	err := collectionAbi.CheckSpec(spec)
 	if err != nil {
 		return err
