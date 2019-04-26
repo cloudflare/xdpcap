@@ -53,19 +53,20 @@ func newProgram(filter []bpf.Instruction, action XDPAction, perfMap *ebpf.Map) (
 	}
 
 	// Labels of blocks
+	const result = "result"
 	const exit = "exit"
-	const match = "match"
 
 	ebpfFilter, err := cbpfc.ToEBPF(filter, cbpfc.EBPFOpts{
-		PacketStart:  asm.R0,
-		PacketEnd:    asm.R1,
-		RegA:         asm.R2,
-		RegX:         asm.R3,
-		RegTmp:       asm.R4,
-		RegIndirect:  asm.R5,
-		LabelPrefix:  "filter",
-		MatchLabel:   match,
-		NoMatchLabel: exit,
+		PacketStart: asm.R0,
+		PacketEnd:   asm.R1,
+
+		Result:      asm.R2,
+		ResultLabel: result,
+
+		Working: [4]asm.Register{asm.R2, asm.R3, asm.R4, asm.R5},
+
+		StackOffset: 0,
+		LabelPrefix: "filter",
 	})
 	if err != nil {
 		return nil, errors.Wrap(err, "converting cBPF to eBPF")
@@ -111,15 +112,12 @@ func newProgram(filter []bpf.Instruction, action XDPAction, perfMap *ebpf.Map) (
 
 	insns = append(insns, ebpfFilter...)
 
-	// Filter doesn't use match label
-	if _, ok := insns.ReferenceOffsets()[match]; !ok {
-		return nil, errors.New("filter will never match any packet")
-	}
-
-	// Match - sample with perf
 	insns = append(insns,
+		// Packet didn't match filter
+		asm.JEq.Imm(asm.R2, 0, exit).Sym(result),
+
 		// Matched packets
-		asm.LoadMem(asm.R0, asm.R7, int16(8*matchedPackets), asm.DWord).Sym(match),
+		asm.LoadMem(asm.R0, asm.R7, int16(8*matchedPackets), asm.DWord),
 		asm.Add.Imm(asm.R0, 1),
 		asm.StoreMem(asm.R7, int16(8*matchedPackets), asm.R0, asm.DWord),
 
