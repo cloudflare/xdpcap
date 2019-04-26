@@ -8,7 +8,6 @@ import (
 	"github.com/cloudflare/xdpcap"
 
 	"github.com/newtools/ebpf"
-	"golang.org/x/net/bpf"
 )
 
 var testOpts = FilterOpts{
@@ -119,14 +118,6 @@ func TestPerf(t *testing.T) {
 
 	case err := <-errors:
 		t.Fatal(err)
-	}
-}
-
-func TestImpossibleFilter(t *testing.T) {
-	// never match
-	_, err := newFilter(hookMap(t, 3), []bpf.Instruction{bpf.RetConstant{Val: 0}}, testOpts)
-	if err == nil {
-		t.Fatal("impossible filter accepted")
 	}
 }
 
