@@ -1,0 +1,19 @@
+language: go
+dist: xenial
+
+go:
+  - 1.12.x
+
+env:
+  - GO111MODULE=on
+
+addons:
+  apt:
+    packages:
+      - libpcap0.8-dev
+
+script:
+  # gofmt doesn't report any changes
+  - test -z $(gofmt -l ./ | tee /dev/stderr)
+  # tests need to run as root to load XDP programs
+  - sudo -E env "PATH=$PATH" go test ./...
