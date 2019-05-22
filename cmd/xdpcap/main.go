@@ -39,14 +39,15 @@ func main() {
 		perCPUBuffer = flag.Int("buffer", 8192, "Per CPU perf buffer size to create (`bytes`)")
 		watermark    = flag.Int("watermark", 4096, "Perf watermark (`bytes`)")
 		quiet        = flag.Bool("q", false, "Don't print statistics")
+		flush        = flag.Bool("flush", false, "Flush pcap data written to <output> for every packet received")
 	)
 
 	flag.Usage = func() {
 		fmt.Fprintln(os.Stderr, os.Args[0], "<debug map> <output> [<tcpdump filter expr>]")
 		fmt.Fprintf(os.Stderr, `
-Capture packets handled by XDP (l4drop, Unimog) matching a tcpdump filter expression.
+Capture packets from XDP programs matching a tcpdump filter expression.
 
-<output> may be "-" to write to stdout.
+<output> may be "-" to write to stdout. Implies -q and -flush.
 
 `)
 		flag.PrintDefaults()
@@ -63,6 +64,7 @@ Capture packets handled by XDP (l4drop, Unimog) matching a tcpdump filter expres
 	if output := flag.Arg(1); output == "-" {
 		pcapFile = os.Stdout
 		*quiet = true
+		*flush = true
 	} else {
 		var err error
 		pcapFile, err = os.Create(output)
@@ -71,6 +73,7 @@ Capture packets handled by XDP (l4drop, Unimog) matching a tcpdump filter expres
 			os.Exit(1)
 		}
 	}
+	defer pcapFile.Close()
 
 	// Default filter is match anything
 	expr := ""
@@ -79,9 +82,16 @@ Capture packets handled by XDP (l4drop, Unimog) matching a tcpdump filter expres
 	}
 
 	mapFile := flag.Arg(0)
-	err := capture(mapFile, pcapFile, *quiet, expr, FilterOpts{
-		PerfPerCPUBuffer: *perCPUBuffer,
-		PerfWatermark:    *watermark,
+	err := capture(captureOpts{
+		mapPath:    mapFile,
+		pcapFile:   pcapFile,
+		quiet:      *quiet,
+		flush:      *flush,
+		filterExpr: expr,
+		filterOpts: FilterOpts{
+			PerfPerCPUBuffer: *perCPUBuffer,
+			PerfWatermark:    *watermark,
+		},
 	})
 
 	if err != nil {
@@ -90,9 +100,18 @@ Capture packets handled by XDP (l4drop, Unimog) matching a tcpdump filter expres
 	}
 }
 
-func capture(mapPath string, pcapFile *os.File, quiet bool, filterExpr string, opts FilterOpts) error {
-	defer pcapFile.Sync()
+type captureOpts struct {
+	mapPath  string
+	pcapFile *os.File
 
+	quiet bool
+	flush bool
+
+	filterExpr string
+	filterOpts FilterOpts
+}
+
+func capture(opts captureOpts) error {
 	// BPF progs, maps and the perf buffer are stored in locked memory
 	err := unlimitLockedMemory()
 	if err != nil {
@@ -103,14 +122,14 @@ func capture(mapPath string, pcapFile *os.File, quiet bool, filterExpr string, o
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
 
-	filter, err := NewFilter(mapPath, filterExpr, opts)
+	filter, err := NewFilter(opts.mapPath, opts.filterExpr, opts.filterOpts)
 	if err != nil {
 		return errors.Wrap(err, "creating filter")
 	}
 
 	// Need to close the filter after the pcap writer
 
-	pcapWriter, interfaces, err := newPcapWriter(pcapFile, filterExpr, filter.Actions())
+	pcapWriter, interfaces, err := newPcapWriter(opts.pcapFile, opts.filterExpr, filter.Actions())
 	if err != nil {
 		filter.Close()
 		return errors.Wrap(err, "writing pcap header")
@@ -118,7 +137,7 @@ func capture(mapPath string, pcapFile *os.File, quiet bool, filterExpr string, o
 	defer pcapWriter.Flush()
 	defer filter.Close()
 
-	if !quiet {
+	if !opts.quiet {
 		// Print metrics every 1 second
 		go func() {
 			ticker := time.NewTicker(time.Second)
@@ -166,6 +185,13 @@ func capture(mapPath string, pcapFile *os.File, quiet bool, filterExpr string, o
 					fmt.Fprintln(os.Stderr, "Error writing packet:", err)
 				}
 
+				if opts.flush {
+					err = pcapWriter.Flush()
+					if err != nil {
+						fmt.Fprintln(os.Stderr, "Error flushing data:", err)
+					}
+				}
+
 			case err := <-errors:
 				fmt.Fprintln(os.Stderr, "Error receiving packet:", err)
 			}
@@ -206,6 +232,12 @@ func newPcapWriter(w io.Writer, filterExpr string, actions []XDPAction) (*pcapgo
 		if err != nil {
 			return nil, nil, err
 		}
+	}
+
+	// Flush the header out in case we're writing to stdout, this lets tcpdump print a reassuring message
+	err = pcapWriter.Flush()
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "writing pcap header")
 	}
 
 	return pcapWriter, actionIfcs, nil
