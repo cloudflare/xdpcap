@@ -10,6 +10,33 @@ import (
 	"github.com/pkg/errors"
 )
 
+type actionsFlag []xdpAction
+
+func (a *actionsFlag) Set(val string) error {
+	// Clear defaults
+	*a = []xdpAction{}
+
+	for _, action := range strings.Split(val, ",") {
+		xdpAction, err := parseAction(action)
+		if err != nil {
+			return err
+		}
+
+		*a = append(*a, xdpAction)
+	}
+
+	return nil
+}
+
+func (a *actionsFlag) String() string {
+	strs := []string{}
+	for _, action := range *a {
+		strs = append(strs, action.String())
+	}
+
+	return strings.Join(strs, ",")
+}
+
 type flags struct {
 	*flag.FlagSet
 
@@ -38,6 +65,9 @@ func parseFlags(name string, args []string) (flags, error) {
 	flags.UintVar(&flags.filterOpts.perfWatermark, "watermark", 4096, "Perf watermark (`bytes`)")
 	flags.BoolVar(&flags.quiet, "q", false, "Don't print statistics")
 	flags.BoolVar(&flags.flush, "flush", false, "Flush pcap data written to <output> for every packet received")
+
+	flags.filterOpts.actions = []xdpAction{xdpAborted, xdpDrop, xdpPass, xdpTx}
+	flags.Var((*actionsFlag)(&flags.filterOpts.actions), "actions", "Comma separated XDP `actions` to capture packets for. Action can be a name, or the enum value")
 
 	err := flags.Parse(args)
 	if err != nil {

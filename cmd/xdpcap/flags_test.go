@@ -76,7 +76,7 @@ func TestOutputStdout(t *testing.T) {
 func TestOptions(t *testing.T) {
 	output := tempOutput(t)
 
-	flags, err := parseFlags("", []string{"-buffer", "1234", "-watermark", "5678", "-q", "-flush", "foo", output})
+	flags, err := parseFlags("", []string{"-buffer", "1234", "-watermark", "5678", "-q", "-flush", "-actions", "pass,drop", "foo", output})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,8 +86,46 @@ func TestOptions(t *testing.T) {
 	expected.filterOpts.perfWatermark = 5678
 	expected.quiet = true
 	expected.flush = true
+	expected.filterOpts.actions = []xdpAction{xdpPass, xdpDrop}
 
 	requireFlags(t, output, expected, flags)
+}
+
+func TestActionsFlagUnknown(t *testing.T) {
+	output := tempOutput(t)
+
+	flags, err := parseFlags("", []string{"-actions", "pass,aborted,3", "foo", output})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expected := defaultFlags("foo")
+	expected.filterOpts.actions = []xdpAction{xdpPass, xdpAborted, xdpAction(3)}
+
+	requireFlags(t, output, expected, flags)
+}
+
+func TestActionsFlagWhitespace(t *testing.T) {
+	output := tempOutput(t)
+
+	flags, err := parseFlags("", []string{"-actions", "pass, aborted\t,\n3", "foo", output})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expected := defaultFlags("foo")
+	expected.filterOpts.actions = []xdpAction{xdpPass, xdpAborted, xdpAction(3)}
+
+	requireFlags(t, output, expected, flags)
+}
+
+func TestActionsFlagBad(t *testing.T) {
+	output := tempOutput(t)
+
+	_, err := parseFlags("", []string{"-actions", "foobar, aborted", "foo", output})
+	if err == nil {
+		t.Fatal("bad xdp action foobar accepted")
+	}
 }
 
 func TestUsage(t *testing.T) {
@@ -126,6 +164,7 @@ func defaultFlags(mapPath string) flags {
 		filterOpts: filterOpts{
 			perfPerCPUBuffer: 8192,
 			perfWatermark:    4096,
+			actions:          []xdpAction{xdpAborted, xdpDrop, xdpPass, xdpTx},
 		},
 	}
 }
