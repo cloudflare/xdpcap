@@ -24,7 +24,6 @@ import (
 	"math"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
@@ -35,83 +34,26 @@ import (
 )
 
 func main() {
-	var (
-		perCPUBuffer = flag.Int("buffer", 8192, "Per CPU perf buffer size to create (`bytes`)")
-		watermark    = flag.Int("watermark", 4096, "Perf watermark (`bytes`)")
-		quiet        = flag.Bool("q", false, "Don't print statistics")
-		flush        = flag.Bool("flush", false, "Flush pcap data written to <output> for every packet received")
-	)
+	flags, err := parseFlags(os.Args[0], os.Args[1:])
+	switch {
+	case err == flag.ErrHelp:
+		fmt.Fprintf(os.Stderr, flags.Usage())
+		os.Exit(0)
 
-	flag.Usage = func() {
-		fmt.Fprintln(os.Stderr, os.Args[0], "<debug map> <output> [<tcpdump filter expr>]")
-		fmt.Fprintf(os.Stderr, `
-Capture packets from XDP programs matching a tcpdump filter expression.
-
-<output> may be "-" to write to stdout. Implies -q and -flush.
-
-`)
-		flag.PrintDefaults()
-	}
-
-	flag.Parse()
-
-	if flag.NArg() < 2 {
-		flag.Usage()
+	case err != nil:
+		fmt.Fprintf(os.Stderr, "Error: %v\n\nUsage: %s", err, flags.Usage())
 		os.Exit(1)
 	}
+	defer flags.pcapFile.Close()
 
-	var pcapFile *os.File
-	if output := flag.Arg(1); output == "-" {
-		pcapFile = os.Stdout
-		*quiet = true
-		*flush = true
-	} else {
-		var err error
-		pcapFile, err = os.Create(output)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "Can't create output:", err)
-			os.Exit(1)
-		}
-	}
-	defer pcapFile.Close()
-
-	// Default filter is match anything
-	expr := ""
-	if flag.NArg() >= 3 {
-		expr = strings.Join(flag.Args()[2:], " ")
-	}
-
-	mapFile := flag.Arg(0)
-	err := capture(captureOpts{
-		mapPath:    mapFile,
-		pcapFile:   pcapFile,
-		quiet:      *quiet,
-		flush:      *flush,
-		filterExpr: expr,
-		filterOpts: filterOpts{
-			perfPerCPUBuffer: *perCPUBuffer,
-			perfWatermark:    *watermark,
-		},
-	})
-
+	err = capture(flags)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Error:", err)
-		os.Exit(1)
+		os.Exit(2)
 	}
 }
 
-type captureOpts struct {
-	mapPath  string
-	pcapFile *os.File
-
-	quiet bool
-	flush bool
-
-	filterExpr string
-	filterOpts filterOpts
-}
-
-func capture(opts captureOpts) error {
+func capture(flags flags) error {
 	// BPF progs, maps and the perf buffer are stored in locked memory
 	err := unlimitLockedMemory()
 	if err != nil {
@@ -122,14 +64,14 @@ func capture(opts captureOpts) error {
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
 
-	filter, err := newFilter(opts.mapPath, opts.filterExpr, opts.filterOpts)
+	filter, err := newFilter(flags.mapPath, flags.filterExpr, flags.filterOpts)
 	if err != nil {
 		return errors.Wrap(err, "creating filter")
 	}
 
 	// Need to close the filter after the pcap writer
 
-	pcapWriter, interfaces, err := newPcapWriter(opts.pcapFile, opts.filterExpr, filter.actions)
+	pcapWriter, interfaces, err := newPcapWriter(flags.pcapFile, flags.filterExpr, filter.actions)
 	if err != nil {
 		filter.close()
 		return errors.Wrap(err, "writing pcap header")
@@ -137,7 +79,7 @@ func capture(opts captureOpts) error {
 	defer pcapWriter.Flush()
 	defer filter.close()
 
-	if !opts.quiet {
+	if !flags.quiet {
 		// Print metrics every 1 second
 		go func() {
 			ticker := time.NewTicker(time.Second)
@@ -185,7 +127,7 @@ func capture(opts captureOpts) error {
 					fmt.Fprintln(os.Stderr, "Error writing packet:", err)
 				}
 
-				if opts.flush {
+				if flags.flush {
 					err = pcapWriter.Flush()
 					if err != nil {
 						fmt.Fprintln(os.Stderr, "Error flushing data:", err)
