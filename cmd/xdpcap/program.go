@@ -10,22 +10,28 @@ import (
 
 const BPF_F_CURRENT_CPU int64 = 0xFFFFFFFF
 
-type metrics [3]uint64
+type rawMetrics [3]uint64
 
-type metric int
+type rawMetric int
 
 const (
-	receivedPackets metric = iota
+	receivedPackets rawMetric = iota
 	matchedPackets
 	perfOutputErrors
 )
+
+type metrics struct {
+	receivedPackets  uint64
+	matchedPackets   uint64
+	perfOutputErrors uint64
+}
 
 // map for exporting metrics
 var metricsSpec = ebpf.MapSpec{
 	Name:       "xdpcap_metrics",
 	Type:       ebpf.PerCPUArray,
 	KeySize:    4,
-	ValueSize:  uint32(len(metrics{}) * 8),
+	ValueSize:  uint32(len(rawMetrics{}) * 8),
 	MaxEntries: 1,
 }
 
@@ -36,12 +42,12 @@ var perfABI = ebpf.MapABI{
 
 // program represents a filter program for a particular XDP action
 type program struct {
-	program *ebpf.Program
-	metrics *ebpf.Map
+	program    *ebpf.Program
+	metricsMap *ebpf.Map
 }
 
 // newProgram builds an eBPF program that copies packets matching a cBPF program to userspace via perf
-func newProgram(filter []bpf.Instruction, action XDPAction, perfMap *ebpf.Map) (*program, error) {
+func newProgram(filter []bpf.Instruction, action xdpAction, perfMap *ebpf.Map) (*program, error) {
 	metricsMap, err := ebpf.NewMap(&metricsSpec)
 	if err != nil {
 		return nil, errors.Wrap(err, "creating metrics map")
@@ -174,20 +180,20 @@ func newProgram(filter []bpf.Instruction, action XDPAction, perfMap *ebpf.Map) (
 	}
 
 	return &program{
-		program: prog,
-		metrics: metricsMap,
+		program:    prog,
+		metricsMap: metricsMap,
 	}, nil
 }
 
-func (p *program) Close() {
-	p.metrics.Close()
+func (p *program) close() {
+	p.metricsMap.Close()
 	p.program.Close()
 }
 
-func (p *program) Metrics() (metrics, error) {
-	perCpuMetrics := []metrics{}
+func (p *program) metrics() (metrics, error) {
+	perCpuMetrics := []rawMetrics{}
 
-	ok, err := p.metrics.Get(uint32(0), &perCpuMetrics)
+	ok, err := p.metricsMap.Get(uint32(0), &perCpuMetrics)
 	if err != nil {
 		return metrics{}, errors.Wrap(err, "accessing metrics map")
 	} else if !ok {
@@ -196,9 +202,9 @@ func (p *program) Metrics() (metrics, error) {
 
 	metrics := metrics{}
 	for _, cpu := range perCpuMetrics {
-		for i, m := range cpu {
-			metrics[i] += m
-		}
+		metrics.receivedPackets += cpu[receivedPackets]
+		metrics.matchedPackets += cpu[matchedPackets]
+		metrics.perfOutputErrors += cpu[perfOutputErrors]
 	}
 
 	return metrics, nil

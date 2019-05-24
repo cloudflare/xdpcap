@@ -1,12 +1,12 @@
 package main
 
-type XDPAction int
+type xdpAction int
 
-//go:generate stringer -type=XDPAction
+//go:generate stringer -type=xdpAction -trimprefix=xdp
 
 const (
-	XDPAborted XDPAction = iota
-	XDPDrop
-	XDPPass
-	XDPTx
+	xdpAborted xdpAction = iota
+	xdpDrop
+	xdpPass
+	xdpTx
 )
