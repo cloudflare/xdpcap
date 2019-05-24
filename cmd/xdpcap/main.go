@@ -88,9 +88,9 @@ Capture packets from XDP programs matching a tcpdump filter expression.
 		quiet:      *quiet,
 		flush:      *flush,
 		filterExpr: expr,
-		filterOpts: FilterOpts{
-			PerfPerCPUBuffer: *perCPUBuffer,
-			PerfWatermark:    *watermark,
+		filterOpts: filterOpts{
+			perfPerCPUBuffer: *perCPUBuffer,
+			perfWatermark:    *watermark,
 		},
 	})
 
@@ -108,7 +108,7 @@ type captureOpts struct {
 	flush bool
 
 	filterExpr string
-	filterOpts FilterOpts
+	filterOpts filterOpts
 }
 
 func capture(opts captureOpts) error {
@@ -122,20 +122,20 @@ func capture(opts captureOpts) error {
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
 
-	filter, err := NewFilter(opts.mapPath, opts.filterExpr, opts.filterOpts)
+	filter, err := newFilter(opts.mapPath, opts.filterExpr, opts.filterOpts)
 	if err != nil {
 		return errors.Wrap(err, "creating filter")
 	}
 
 	// Need to close the filter after the pcap writer
 
-	pcapWriter, interfaces, err := newPcapWriter(opts.pcapFile, opts.filterExpr, filter.Actions())
+	pcapWriter, interfaces, err := newPcapWriter(opts.pcapFile, opts.filterExpr, filter.actions)
 	if err != nil {
-		filter.Close()
+		filter.close()
 		return errors.Wrap(err, "writing pcap header")
 	}
 	defer pcapWriter.Flush()
-	defer filter.Close()
+	defer filter.close()
 
 	if !opts.quiet {
 		// Print metrics every 1 second
@@ -146,14 +146,14 @@ func capture(opts captureOpts) error {
 			for range ticker.C {
 				str := bytes.Buffer{}
 
-				metrics, err := filter.Metrics()
+				metrics, err := filter.metrics()
 				if err != nil {
 					fmt.Fprintln(os.Stderr, "Error getting metrics:", err)
 					continue
 				}
 
-				for _, action := range filter.Actions() {
-					fmt.Fprintf(&str, "%v: %d/%d\t", action, metrics[action].ReceivedPackets, metrics[action].MatchedPackets)
+				for _, action := range filter.actions {
+					fmt.Fprintf(&str, "%v: %d/%d\t", action, metrics[action].receivedPackets, metrics[action].matchedPackets)
 				}
 
 				str.WriteString("(received/matched packets)\n")
@@ -163,10 +163,10 @@ func capture(opts captureOpts) error {
 	}
 
 	// Aggregate packets of all programs of the filter
-	packets := make(chan Packet)
+	packets := make(chan packet)
 	errors := make(chan error)
 
-	go filter.Forward(packets, errors)
+	go filter.forward(packets, errors)
 
 	// Write out a pcap file from aggregated packets
 	go func() {
@@ -175,12 +175,12 @@ func capture(opts captureOpts) error {
 			case pkt := <-packets:
 				info := gopacket.CaptureInfo{
 					Timestamp:      time.Now(),
-					CaptureLength:  len(pkt.Data),
-					Length:         len(pkt.Data),
-					InterfaceIndex: interfaces[pkt.Action],
+					CaptureLength:  len(pkt.data),
+					Length:         len(pkt.data),
+					InterfaceIndex: interfaces[pkt.action],
 				}
 
-				err := pcapWriter.WritePacket(info, pkt.Data)
+				err := pcapWriter.WritePacket(info, pkt.data)
 				if err != nil {
 					fmt.Fprintln(os.Stderr, "Error writing packet:", err)
 				}
@@ -203,17 +203,17 @@ func capture(opts captureOpts) error {
 }
 
 // newPcapWriter creates a pcapWriter with an pcap interface (metadata) per xdp action
-func newPcapWriter(w io.Writer, filterExpr string, actions []XDPAction) (*pcapgo.NgWriter, map[XDPAction]int, error) {
+func newPcapWriter(w io.Writer, filterExpr string, actions []xdpAction) (*pcapgo.NgWriter, map[xdpAction]int, error) {
 	if len(actions) == 0 {
 		return nil, nil, errors.New("can't create pcap with no actions")
 	}
 
 	var interfaces []pcapgo.NgInterface
-	actionIfcs := make(map[XDPAction]int)
+	actionIfcs := make(map[xdpAction]int)
 
 	for id, action := range actions {
 		interfaces = append(interfaces, pcapgo.NgInterface{
-			Name:       action.String(),
+			Name:       fmt.Sprintf("XDP%s", action.String()),
 			Comment:    "XDP action",
 			Filter:     filterExpr,
 			LinkType:   layers.LinkTypeEthernet,

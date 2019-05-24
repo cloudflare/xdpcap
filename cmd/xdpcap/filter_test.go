@@ -10,9 +10,9 @@ import (
 	"github.com/newtools/ebpf"
 )
 
-var testOpts = FilterOpts{
-	PerfPerCPUBuffer: 8192,
-	PerfWatermark:    4096,
+var testOpts = filterOpts{
+	perfPerCPUBuffer: 8192,
+	perfWatermark:    4096,
 }
 
 func TestMain(m *testing.M) {
@@ -26,7 +26,7 @@ func TestMain(m *testing.M) {
 
 func TestEmptyExpr(t *testing.T) {
 	filter := mustNew(t, "", 4, testOpts)
-	defer filter.Close()
+	defer filter.close()
 	discardPerf(t, filter)
 
 	checkActions(t, filter, []byte{})
@@ -35,7 +35,7 @@ func TestEmptyExpr(t *testing.T) {
 func TestUnknownAction(t *testing.T) {
 	// progs with actions from 0-9. Only 0-3 are used currently.
 	filter := mustNew(t, "", 10, testOpts)
-	defer filter.Close()
+	defer filter.close()
 	discardPerf(t, filter)
 
 	checkActions(t, filter, []byte{})
@@ -43,74 +43,74 @@ func TestUnknownAction(t *testing.T) {
 
 func TestMetrics(t *testing.T) {
 	filter := mustNew(t, "ether[0] == 2", 4, testOpts)
-	defer filter.Close()
+	defer filter.close()
 	discardPerf(t, filter)
 
 	// Match - 1 packet received, 1 matched
 	checkActions(t, filter, []byte{2})
 
-	metrics, err := filter.Metrics()
+	metrics, err := filter.metrics()
 	if err != nil {
 		t.Fatal(err)
 	}
 	for action, progMetrics := range metrics {
-		if progMetrics.ReceivedPackets != 1 {
-			t.Fatalf("filter %v ReceivedPackets expected 1, got %d", action, progMetrics.ReceivedPackets)
+		if progMetrics.receivedPackets != 1 {
+			t.Fatalf("filter %v receivedPackets expected 1, got %d", action, progMetrics.receivedPackets)
 		}
 
-		if progMetrics.MatchedPackets != 1 {
-			t.Fatalf("filter %v MatchedPackets expected 1, got %d", action, progMetrics.MatchedPackets)
+		if progMetrics.matchedPackets != 1 {
+			t.Fatalf("filter %v matchedPackets expected 1, got %d", action, progMetrics.matchedPackets)
 		}
 
-		if progMetrics.PerfOutputErrors != 0 {
-			t.Fatalf("filter %v PerfOutputErrors expected 0, got %d", action, progMetrics.PerfOutputErrors)
+		if progMetrics.perfOutputErrors != 0 {
+			t.Fatalf("filter %v perfOutputErrors expected 0, got %d", action, progMetrics.perfOutputErrors)
 		}
 	}
 
 	// No match - 2 packet received, 1 matched
 	checkActions(t, filter, []byte{3})
 
-	metrics, err = filter.Metrics()
+	metrics, err = filter.metrics()
 	if err != nil {
 		t.Fatal(err)
 	}
 	for action, progMetrics := range metrics {
-		if progMetrics.ReceivedPackets != 2 {
-			t.Fatalf("filter %v ReceivedPackets expected 2, got %d", action, progMetrics.ReceivedPackets)
+		if progMetrics.receivedPackets != 2 {
+			t.Fatalf("filter %v receivedPackets expected 2, got %d", action, progMetrics.receivedPackets)
 		}
 
-		if progMetrics.MatchedPackets != 1 {
-			t.Fatalf("filter %v MatchedPackets expected 1, got %d", action, progMetrics.MatchedPackets)
+		if progMetrics.matchedPackets != 1 {
+			t.Fatalf("filter %v matchedPackets expected 1, got %d", action, progMetrics.matchedPackets)
 		}
 
-		if progMetrics.PerfOutputErrors != 0 {
-			t.Fatalf("filter %v PerfOutputErrors expected 0, got %d", action, progMetrics.PerfOutputErrors)
+		if progMetrics.perfOutputErrors != 0 {
+			t.Fatalf("filter %v perfOutputErrors expected 0, got %d", action, progMetrics.perfOutputErrors)
 		}
 	}
 }
 
 func TestPerf(t *testing.T) {
 	filter := mustNew(t, "ether[0] == 0xde", 1, testOpts)
-	defer filter.Close()
+	defer filter.close()
 
-	packets := make(chan Packet)
+	packets := make(chan packet)
 	errors := make(chan error)
 
-	go filter.Forward(packets, errors)
+	go filter.forward(packets, errors)
 
 	// Match
 	pktData := []byte{0xde, 0xad, 0xbe, 0xef}
 	checkActions(t, filter, pktData)
 
-	filter.Close()
+	filter.close()
 
 	select {
 	case pkt := <-packets:
-		if len(pkt.Data) < len(pktData) {
+		if len(pkt.data) < len(pktData) {
 			t.Fatal("unexpected packet length")
 		}
 
-		if !bytes.Equal(pktData, pkt.Data[:len(pktData)]) {
+		if !bytes.Equal(pktData, pkt.data[:len(pktData)]) {
 			t.Fatal("unexpected packet contents")
 		}
 
@@ -123,7 +123,7 @@ func TestPerf(t *testing.T) {
 
 // checkActions checks that all programs return their expected action, and the packet isn't modified
 // Packet is 0 padded to min ethernet length
-func checkActions(t *testing.T, filter *Filter, in []byte) {
+func checkActions(t *testing.T, filter *filter, in []byte) {
 	if len(in) < 14 {
 		t := make([]byte, 14)
 		copy(t, in)
@@ -140,7 +140,7 @@ func checkActions(t *testing.T, filter *Filter, in []byte) {
 			t.Fatalf("Program modified input:\nIn: %v\nOut: %v\n", in, out)
 		}
 
-		retAction := XDPAction(ret)
+		retAction := xdpAction(ret)
 
 		if retAction != action {
 			t.Fatalf("Program returned %v, expected %v\n", retAction, action)
@@ -165,10 +165,10 @@ func hookMap(t *testing.T, entries uint32) *ebpf.Map {
 	return hookMap
 }
 
-func mustNew(t *testing.T, expr string, entries uint32, opts FilterOpts) *Filter {
+func mustNew(t *testing.T, expr string, entries uint32, opts filterOpts) *filter {
 	t.Helper()
 
-	filter, err := NewFilterWithMap(hookMap(t, entries), expr, opts)
+	filter, err := newFilterWithMap(hookMap(t, entries), expr, opts)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -178,13 +178,13 @@ func mustNew(t *testing.T, expr string, entries uint32, opts FilterOpts) *Filter
 
 // read and discard perf packets & errors
 // required to Filter.Close() for tests that don't care about perf
-func discardPerf(t *testing.T, filter *Filter) {
+func discardPerf(t *testing.T, filter *filter) {
 	t.Helper()
 
-	packets := make(chan Packet)
+	packets := make(chan packet)
 	errors := make(chan error)
 
-	go filter.Forward(packets, errors)
+	go filter.forward(packets, errors)
 	go func() {
 		for {
 			select {
