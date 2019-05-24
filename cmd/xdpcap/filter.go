@@ -18,8 +18,8 @@ var perfMapSpec = ebpf.MapSpec{
 }
 
 type filterOpts struct {
-	perfPerCPUBuffer int
-	perfWatermark    int
+	perfPerCPUBuffer uint
+	perfWatermark    uint
 }
 
 // filter represents a filter loaded into the kernel
@@ -61,8 +61,8 @@ func newFilterWithMap(hookMap *ebpf.Map, expr string, opts filterOpts) (*filter,
 
 	reader, err := ebpf.NewPerfReader(ebpf.PerfReaderOptions{
 		Map:          perfMap,
-		PerCPUBuffer: opts.perfPerCPUBuffer,
-		Watermark:    opts.perfWatermark,
+		PerCPUBuffer: int(opts.perfPerCPUBuffer),
+		Watermark:    int(opts.perfWatermark),
 	})
 	if err != nil {
 		return nil, errors.Wrap(err, "can't create perf event reader")
