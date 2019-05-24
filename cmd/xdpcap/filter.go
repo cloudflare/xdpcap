@@ -20,6 +20,8 @@ var perfMapSpec = ebpf.MapSpec{
 type filterOpts struct {
 	perfPerCPUBuffer uint
 	perfWatermark    uint
+
+	actions []xdpAction
 }
 
 // filter represents a filter loaded into the kernel
@@ -72,14 +74,10 @@ func newFilterWithMap(hookMap *ebpf.Map, expr string, opts filterOpts) (*filter,
 		hookMap:  hookMap,
 		reader:   reader,
 		programs: make(map[xdpAction]*program),
-		actions:  []xdpAction{},
+		actions:  opts.actions,
 	}
 
-	// Attach a prog for every index of the map
-	for i := 0; i < int(hookMap.ABI().MaxEntries); i++ {
-		action := xdpAction(i)
-		filter.actions = append(filter.actions, action)
-
+	for _, action := range opts.actions {
 		program, err := newProgram(insns, action, perfMap)
 		if err != nil {
 			return nil, errors.Wrapf(err, "loading filter program for %v", action)
