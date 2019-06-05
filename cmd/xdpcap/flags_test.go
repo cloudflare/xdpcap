@@ -5,10 +5,13 @@ import (
 	"io/ioutil"
 	"os"
 	"reflect"
+	"strings"
 	"testing"
+
+	"golang.org/x/net/bpf"
 )
 
-func TestArgs(t *testing.T) {
+func TestRequiredArgs(t *testing.T) {
 	output := tempOutput(t)
 
 	flags, err := parseFlags("", []string{})
@@ -27,24 +30,6 @@ func TestArgs(t *testing.T) {
 		t.Fatal(err)
 	}
 	requireFlags(t, output, defaultFlags("foo"), flags)
-
-	// Three args
-	flags, err = parseFlags("", []string{"foo", output, "bar"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	expected := defaultFlags("foo")
-	expected.filterExpr = "bar"
-	requireFlags(t, output, expected, flags)
-
-	// Four args
-	flags, err = parseFlags("", []string{"foo", output, "bar", "shoe"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	expected = defaultFlags("foo")
-	expected.filterExpr = "bar shoe"
-	requireFlags(t, output, expected, flags)
 }
 
 func TestOutputInvalid(t *testing.T) {
@@ -70,6 +55,78 @@ func TestOutputStdout(t *testing.T) {
 
 	if flags.flush != true {
 		t.Fatal("stdout should set flush")
+	}
+}
+
+func TestFilterLibpcap(t *testing.T) {
+	output := tempOutput(t)
+
+	// Single arg
+	flags, err := parseFlags("", []string{"foo", output, "ip"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected := defaultFlags("foo")
+	expected.filterExpr = "ip"
+	requireFlags(t, output, expected, flags)
+
+	// Multiple args
+	flags, err = parseFlags("", []string{"foo", output, "vlan", "and", "ip"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected = defaultFlags("foo")
+	expected.filterExpr = "vlan and ip"
+	requireFlags(t, output, expected, flags)
+}
+
+func TestFilterRaw(t *testing.T) {
+	output := tempOutput(t)
+
+	test := func(args []string, filter []bpf.Instruction) {
+		t.Helper()
+
+		flags, err := parseFlags("", append([]string{"foo", output}, args...))
+		if err != nil {
+			t.Fatal(err)
+		}
+		expected := defaultFlags("foo")
+		expected.filterExpr = strings.Join(args, " ")
+		expected.filterOpts.filter = filter
+		requireFlags(t, output, expected, flags)
+	}
+
+	// Single arg
+	test([]string{"1,6 0 0 1"}, []bpf.Instruction{
+		bpf.RetConstant{Val: 1},
+	})
+
+	// Multiple args
+	test([]string{"1,6", "0", "0", "1"}, []bpf.Instruction{
+		bpf.RetConstant{Val: 1},
+	})
+
+	// Multiple instructions
+	test([]string{"2,48 0 0 0,6 0 0 1"}, []bpf.Instruction{
+		bpf.LoadAbsolute{Off: 0, Size: 1},
+		bpf.RetConstant{Val: 1},
+	})
+
+	// Trailing comma
+	test([]string{"1,6 0 0 1,"}, []bpf.Instruction{
+		bpf.RetConstant{Val: 1},
+	})
+}
+
+func TestFilterRawInvalid(t *testing.T) {
+	_, err := parsecBPF("3,6 0 0 1")
+	if err == nil {
+		t.Fatal("invalid instruction count accepted")
+	}
+
+	_, err = parsecBPF("1,6 0 0 4294967296")
+	if err == nil {
+		t.Fatal("overflowy instruction accepted")
 	}
 }
 
@@ -192,6 +249,16 @@ func requireFlags(tb testing.TB, output string, expected, actual flags) {
 
 	// Don't care about the flagset
 	expected.FlagSet = actual.FlagSet
+
+	// No expected filter, expected filter is filterExpr compiled with libpcap
+	if expected.filterOpts.filter == nil {
+		filter, err := tcpdumpExprToBPF(expected.filterExpr)
+		if err != nil {
+			tb.Fatalf("Expected filterExpr %v can't be compiled: %v\n", expected.filterExpr, err)
+		}
+
+		expected.filterOpts.filter = filter
+	}
 
 	if !reflect.DeepEqual(expected, actual) {
 		tb.Fatalf("\nExpected: %#v\nGot     : %#v\n\n", expected, actual)

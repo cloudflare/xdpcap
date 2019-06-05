@@ -5,9 +5,12 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/pkg/errors"
+	"golang.org/x/net/bpf"
 )
 
 type actionsFlag []xdpAction
@@ -37,6 +40,88 @@ func (a *actionsFlag) String() string {
 	return strings.Join(strs, ",")
 }
 
+var bpfRegex = regexp.MustCompile(`^\d+(?:,\d+ \d+ \d+ \d+)+,?$`)
+
+func parseFilter(expr string) ([]bpf.Instruction, error) {
+	expr = strings.TrimSpace(expr)
+
+	if bpfRegex.MatchString(expr) {
+		return parsecBPF(expr)
+	}
+
+	return tcpdumpExprToBPF(expr)
+}
+
+// parsecBPF parses a string of cBPF 4 tuple instructions, formatted as:
+//
+//     <length>,<opcode> <jt> <jf> <k>,...
+func parsecBPF(bpfStr string) ([]bpf.Instruction, error) {
+	cbpf := strings.Split(strings.TrimSuffix(bpfStr, ","), ",")
+
+	if len(cbpf) < 1 {
+		return nil, errors.Errorf("unable to split cBPF length & instructions")
+	}
+
+	insCount, err := strconv.Atoi(cbpf[0])
+	if err != nil {
+		return nil, errors.Wrapf(err, "unable to parse cBPF length")
+	}
+
+	insns := cbpf[1:]
+	if len(insns) != insCount {
+		return nil, errors.Errorf("declared cBPF instruction length %d doesn't match actual %d", insCount, len(insns))
+	}
+
+	cbpfInsns := make([]bpf.Instruction, len(insns))
+	for i, insnStr := range insns {
+		cbpfInsns[i], err = parseInstruction(insnStr)
+		if err != nil {
+			return nil, errors.Wrapf(err, "instruction %d", i)
+		}
+	}
+
+	return cbpfInsns, nil
+}
+
+// parseInstruction parses a cBPF instruction, formatted as:
+//
+//     <opcode> <jt> <jf> <k>
+func parseInstruction(insnStr string) (bpf.Instruction, error) {
+	fields := strings.Split(insnStr, " ")
+	if len(fields) != 4 {
+		return nil, errors.Errorf("wrong number of fields, expected %d found %d", 4, len(fields))
+	}
+
+	op, err := strconv.ParseUint(fields[0], 10, 16)
+	if err != nil {
+		return nil, errors.Wrapf(err, "unable to parse OpCode")
+	}
+
+	jt, err := strconv.ParseUint(fields[1], 10, 8)
+	if err != nil {
+		return nil, errors.Wrapf(err, "unable to parse JumpTrue")
+	}
+
+	jf, err := strconv.ParseUint(fields[2], 10, 8)
+	if err != nil {
+		return nil, errors.Wrapf(err, "unable to parse JumpFalse")
+	}
+
+	k, err := strconv.ParseUint(fields[3], 10, 32)
+	if err != nil {
+		return nil, errors.Wrapf(err, "unable to parse K")
+	}
+
+	rawInsn := bpf.RawInstruction{
+		Op: uint16(op),
+		Jt: uint8(jt),
+		Jf: uint8(jf),
+		K:  uint32(k),
+	}
+
+	return rawInsn.Disassemble(), nil
+}
+
 type flags struct {
 	*flag.FlagSet
 
@@ -46,6 +131,7 @@ type flags struct {
 	quiet bool
 	flush bool
 
+	// Filter provided as input. Not in any particular format, for metadata / debugging only.
 	filterExpr string
 	filterOpts filterOpts
 }
@@ -93,8 +179,10 @@ func parseFlags(name string, args []string) (flags, error) {
 	}
 
 	// Default filter is match anything
-	if flags.NArg() >= 3 {
-		flags.filterExpr = strings.Join(flags.Args()[2:], " ")
+	flags.filterExpr = strings.Join(flags.Args()[2:], " ")
+	flags.filterOpts.filter, err = parseFilter(flags.filterExpr)
+	if err != nil {
+		return flags, err
 	}
 
 	return flags, nil
@@ -104,9 +192,10 @@ func (flags flags) Usage() string {
 	usage := strings.Builder{}
 
 	usage.WriteString(fmt.Sprintf(
-		`%s [options] <debug map> <output> [<tcpdump filter expr>]
+		`%s [options] <debug map> <output> [<filter expr>]
 
-Capture packets from XDP programs matching a tcpdump filter expression.
+Capture packets from XDP programs matching a tcpdump / libpcap filter expression, <filter expr>.
+<filter expr> can also be a classic BPF filter of the form '<op count>,<op> <jt> <jf> <k>,...'.
 
 <output> may be "-" to write to stdout. Implies -q and -flush.
 
