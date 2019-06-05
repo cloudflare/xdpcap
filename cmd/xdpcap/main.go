@@ -64,7 +64,7 @@ func capture(flags flags) error {
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
 
-	filter, err := newFilter(flags.mapPath, flags.filterExpr, flags.filterOpts)
+	filter, err := newFilter(flags.mapPath, flags.filterOpts)
 	if err != nil {
 		return errors.Wrap(err, "creating filter")
 	}

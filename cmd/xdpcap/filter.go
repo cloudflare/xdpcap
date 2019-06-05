@@ -5,6 +5,7 @@ import (
 
 	"github.com/newtools/ebpf"
 	"github.com/pkg/errors"
+	"golang.org/x/net/bpf"
 )
 
 type packet struct {
@@ -23,6 +24,7 @@ type filterOpts struct {
 
 	// Requested actions. If empty or nil, all the actions exposed by the hookMap are used.
 	actions []xdpAction
+	filter  []bpf.Instruction
 }
 
 // filter represents a filter loaded into the kernel
@@ -37,23 +39,22 @@ type filter struct {
 }
 
 // newFilter creates a filter from a tcpdump / libpcap filter expression
-func newFilter(hookMapPath string, expr string, opts filterOpts) (*filter, error) {
+func newFilter(hookMapPath string, opts filterOpts) (*filter, error) {
 	hookMap, err := ebpf.LoadPinnedMap(hookMapPath)
 	if err != nil {
 		return nil, errors.Wrapf(err, "loading hook map")
 	}
 
-	return newFilterWithMap(hookMap, expr, opts)
+	return newFilterWithMap(hookMap, opts)
 }
 
 // newFilterWithMap creates a filter from a tcpdump / libpcap filter expression
-func newFilterWithMap(hookMap *ebpf.Map, expr string, opts filterOpts) (*filter, error) {
-	insns, err := tcpdumpExprToBPF(expr)
-	if err != nil {
-		return nil, errors.Wrap(err, "converting filter expression to cBPF")
+func newFilterWithMap(hookMap *ebpf.Map, opts filterOpts) (*filter, error) {
+	if len(opts.filter) == 0 {
+		return nil, errors.New("at least one filter cBPF instruction required")
 	}
 
-	err = xdpcap.HookMapABI.Check(hookMap)
+	err := xdpcap.HookMapABI.Check(hookMap)
 	if err != nil {
 		return nil, errors.Wrap(err, "invalid hook map ABI")
 	}
@@ -85,7 +86,7 @@ func newFilterWithMap(hookMap *ebpf.Map, expr string, opts filterOpts) (*filter,
 	}
 
 	for _, action := range opts.actions {
-		program, err := newProgram(insns, action, perfMap)
+		program, err := newProgram(opts.filter, action, perfMap)
 		if err != nil {
 			return nil, errors.Wrapf(err, "loading filter program for %v", action)
 		}

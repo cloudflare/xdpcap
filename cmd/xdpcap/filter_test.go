@@ -8,12 +8,25 @@ import (
 	"github.com/cloudflare/xdpcap"
 
 	"github.com/newtools/ebpf"
+	"golang.org/x/net/bpf"
 )
 
-var testOpts = filterOpts{
-	perfPerCPUBuffer: 8192,
-	perfWatermark:    4096,
-	actions:          []xdpAction{xdpAborted, xdpDrop, xdpPass, xdpTx},
+func testOpts(filter ...bpf.Instruction) filterOpts {
+	return filterOpts{
+		perfPerCPUBuffer: 8192,
+		perfWatermark:    4096,
+		actions:          []xdpAction{xdpAborted, xdpDrop, xdpPass, xdpTx},
+		filter:           filter,
+	}
+}
+
+func matchByte(offset, val uint32) []bpf.Instruction {
+	return []bpf.Instruction{
+		bpf.LoadAbsolute{Off: offset, Size: 1},
+		bpf.JumpIf{Cond: bpf.JumpEqual, Val: val, SkipTrue: 1},
+		bpf.RetConstant{Val: 0},
+		bpf.RetConstant{Val: 1},
+	}
 }
 
 func TestMain(m *testing.M) {
@@ -25,23 +38,22 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-func TestEmptyExpr(t *testing.T) {
-	filter := mustNew(t, "", testOpts)
-	defer filter.close()
-	discardPerf(t, filter)
-
-	checkActions(t, testOpts.actions, filter, []byte{})
+func TestMissingFilter(t *testing.T) {
+	_, err := newFilterWithMap(hookMap(t, 1), testOpts())
+	if err == nil {
+		t.Fatal("empty filter accepted")
+	}
 }
 
 func TestUnknownAction(t *testing.T) {
 	// progs with actions from 0-9. Only 0-3 are used currently.
-	opts := testOpts
+	opts := testOpts(bpf.RetConstant{0})
 	opts.actions = []xdpAction{}
 	for i := 0; i < 10; i++ {
 		opts.actions = append(opts.actions, xdpAction(i))
 	}
 
-	filter := mustNew(t, "", opts)
+	filter := mustNew(t, opts)
 	defer filter.close()
 	discardPerf(t, filter)
 
@@ -49,11 +61,11 @@ func TestUnknownAction(t *testing.T) {
 }
 
 func TestAllActions(t *testing.T) {
-	opts := testOpts
+	opts := testOpts(bpf.RetConstant{3})
 	opts.actions = []xdpAction{}
 
 	// progs with actions from 0-9. Only 0-3 are used currently.
-	filter, err := newFilterWithMap(hookMap(t, 10), "ip", opts)
+	filter, err := newFilterWithMap(hookMap(t, 10), opts)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -76,12 +88,13 @@ func TestAllActions(t *testing.T) {
 }
 
 func TestMetrics(t *testing.T) {
-	filter := mustNew(t, "ether[0] == 2", testOpts)
+	opts := testOpts(matchByte(0, 2)...)
+	filter := mustNew(t, opts)
 	defer filter.close()
 	discardPerf(t, filter)
 
 	// Match - 1 packet received, 1 matched
-	checkActions(t, testOpts.actions, filter, []byte{2})
+	checkActions(t, opts.actions, filter, []byte{2})
 
 	metrics, err := filter.metrics()
 	if err != nil {
@@ -102,7 +115,7 @@ func TestMetrics(t *testing.T) {
 	}
 
 	// No match - 2 packet received, 1 matched
-	checkActions(t, testOpts.actions, filter, []byte{3})
+	checkActions(t, opts.actions, filter, []byte{3})
 
 	metrics, err = filter.metrics()
 	if err != nil {
@@ -124,23 +137,24 @@ func TestMetrics(t *testing.T) {
 }
 
 func TestPerf(t *testing.T) {
-	filter := mustNew(t, "ether[0] == 0xde", testOpts)
+	opts := testOpts(matchByte(0, 0xde)...)
+	filter := mustNew(t, opts)
 	defer filter.close()
 
 	// Buffered so we can close the filter (which FlushAndCloses the perf reader),
 	// without having to concurrently read from packets
-	packets := make(chan packet, len(testOpts.actions))
+	packets := make(chan packet, len(opts.actions))
 	errors := make(chan error)
 
 	go filter.forward(packets, errors)
 
 	// Match
 	pktData := []byte{0xde, 0xad, 0xbe, 0xef}
-	checkActions(t, testOpts.actions, filter, pktData)
+	checkActions(t, opts.actions, filter, pktData)
 
 	filter.close()
 
-	for _, action := range testOpts.actions {
+	for _, action := range opts.actions {
 		select {
 		case pkt := <-packets:
 			if len(pkt.data) < len(pktData) {
@@ -214,10 +228,10 @@ func hookMap(t *testing.T, entries int) *ebpf.Map {
 	return hookMap
 }
 
-func mustNew(t *testing.T, expr string, opts filterOpts) *filter {
+func mustNew(t *testing.T, opts filterOpts) *filter {
 	t.Helper()
 
-	filter, err := newFilterWithMap(hookMap(t, len(opts.actions)), expr, opts)
+	filter, err := newFilterWithMap(hookMap(t, len(opts.actions)), opts)
 	if err != nil {
 		t.Fatal(err)
 	}
