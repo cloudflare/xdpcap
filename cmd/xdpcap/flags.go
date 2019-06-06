@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cloudflare/xdpcap/internal"
+
 	"github.com/google/gopacket/layers"
 	"github.com/pkg/errors"
 	"golang.org/x/net/bpf"
@@ -92,7 +94,7 @@ func parseFilter(expr string, linkType layers.LinkType) ([]bpf.Instruction, erro
 		return parsecBPF(expr)
 	}
 
-	return tcpdumpExprToBPF(expr, linkType)
+	return internal.TcpdumpExprToBPF(expr, linkType)
 }
 
 // parsecBPF parses a string of cBPF 4 tuple instructions, formatted as:

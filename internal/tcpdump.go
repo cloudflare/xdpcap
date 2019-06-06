@@ -1,4 +1,4 @@
-package main
+package internal
 
 import (
 	"github.com/google/gopacket/layers"
@@ -9,7 +9,7 @@ import (
 )
 
 // tcpdumpExprToBPF converts a tcpdump / libpcap filter expression to cBPF using libpcap
-func tcpdumpExprToBPF(filterExpr string, linkType layers.LinkType) ([]bpf.Instruction, error) {
+func TcpdumpExprToBPF(filterExpr string, linkType layers.LinkType) ([]bpf.Instruction, error) {
 	// We treat any != 0 filter return code as a match
 	insns, err := pcap.CompileBPFFilter(linkType, 1, filterExpr)
 	if err != nil {

@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cloudflare/xdpcap/internal"
+
 	"github.com/google/gopacket/layers"
 	"golang.org/x/net/bpf"
 )
@@ -280,7 +282,7 @@ func requireFlags(tb testing.TB, output string, expected, actual flags) {
 
 	// No expected filter, expected filter is filterExpr compiled with libpcap
 	if expected.filterOpts.filter == nil {
-		filter, err := tcpdumpExprToBPF(expected.filterExpr, expected.linkType)
+		filter, err := internal.TcpdumpExprToBPF(expected.filterExpr, expected.linkType)
 		if err != nil {
 			tb.Fatalf("Expected filterExpr %v can't be compiled: %v\n", expected.filterExpr, err)
 		}
