@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/google/gopacket/layers"
 	"github.com/pkg/errors"
 	"golang.org/x/net/bpf"
 )
@@ -31,25 +32,67 @@ func (a *actionsFlag) Set(val string) error {
 	return nil
 }
 
-func (a *actionsFlag) String() string {
+func (a actionsFlag) String() string {
 	strs := []string{}
-	for _, action := range *a {
+	for _, action := range a {
 		strs = append(strs, action.String())
 	}
 
 	return strings.Join(strs, ",")
 }
 
+type linkTypeFlag layers.LinkType
+
+func (l *linkTypeFlag) Set(val string) error {
+	val = strings.TrimSpace(strings.ToLower(val))
+
+	for _, link := range linkTypes() {
+		if val == strings.ToLower(link.String()) {
+			*l = linkTypeFlag(link)
+			return nil
+		}
+	}
+
+	// Accept links we don't know about using their numeric value
+	// Base 0 to allow for hex
+	unknownLink, err := strconv.ParseInt(val, 0, 8)
+	if err != nil {
+		return errors.Errorf("unknown linktype %s", val)
+	}
+
+	*l = linkTypeFlag(unknownLink)
+	return nil
+}
+
+func (l linkTypeFlag) String() string {
+	return strings.ToLower(layers.LinkType(l).String())
+}
+
+// All valid LinkTypes
+func linkTypes() []linkTypeFlag {
+	links := []linkTypeFlag{}
+
+	for link, meta := range layers.LinkTypeMetadata {
+		if meta.Name == "UnknownLinkType" {
+			continue
+		}
+
+		links = append(links, linkTypeFlag(link))
+	}
+
+	return links
+}
+
 var bpfRegex = regexp.MustCompile(`^\d+(?:,\d+ \d+ \d+ \d+)+,?$`)
 
-func parseFilter(expr string) ([]bpf.Instruction, error) {
+func parseFilter(expr string, linkType layers.LinkType) ([]bpf.Instruction, error) {
 	expr = strings.TrimSpace(expr)
 
 	if bpfRegex.MatchString(expr) {
 		return parsecBPF(expr)
 	}
 
-	return tcpdumpExprToBPF(expr)
+	return tcpdumpExprToBPF(expr, linkType)
 }
 
 // parsecBPF parses a string of cBPF 4 tuple instructions, formatted as:
@@ -131,6 +174,8 @@ type flags struct {
 	quiet bool
 	flush bool
 
+	linkType layers.LinkType
+
 	// Filter provided as input. Not in any particular format, for metadata / debugging only.
 	filterExpr string
 	filterOpts filterOpts
@@ -154,6 +199,9 @@ func parseFlags(name string, args []string) (flags, error) {
 
 	flags.filterOpts.actions = []xdpAction{}
 	flags.Var((*actionsFlag)(&flags.filterOpts.actions), "actions", fmt.Sprintf("XDP `actions` to capture packets for. Comma seperated list of names (%v) or enum values (default all actions exposed by the <debug map>)", xdpActions))
+
+	flags.linkType = layers.LinkTypeEthernet
+	flags.Var((*linkTypeFlag)(&flags.linkType), "linktype", fmt.Sprintf("Linktype to use when compiling <filter expr>. Name (%v) or enum value", linkTypes()))
 
 	err := flags.Parse(args)
 	if err != nil {
@@ -180,7 +228,7 @@ func parseFlags(name string, args []string) (flags, error) {
 
 	// Default filter is match anything
 	flags.filterExpr = strings.Join(flags.Args()[2:], " ")
-	flags.filterOpts.filter, err = parseFilter(flags.filterExpr)
+	flags.filterOpts.filter, err = parseFilter(flags.filterExpr, flags.linkType)
 	if err != nil {
 		return flags, err
 	}

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/gopacket/layers"
 	"golang.org/x/net/bpf"
 )
 
@@ -133,7 +134,7 @@ func TestFilterRawInvalid(t *testing.T) {
 func TestOptions(t *testing.T) {
 	output := tempOutput(t)
 
-	flags, err := parseFlags("", []string{"-buffer", "1234", "-watermark", "5678", "-q", "-flush", "-actions", "pass,drop", "foo", output})
+	flags, err := parseFlags("", []string{"-buffer", "1234", "-watermark", "5678", "-q", "-flush", "-actions", "pass,drop", "-linktype", "802.11", "foo", output})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,6 +145,7 @@ func TestOptions(t *testing.T) {
 	expected.quiet = true
 	expected.flush = true
 	expected.filterOpts.actions = []xdpAction{xdpPass, xdpDrop}
+	expected.linkType = layers.LinkTypeIEEE802_11
 
 	requireFlags(t, output, expected, flags)
 }
@@ -196,6 +198,31 @@ func TestActionsFlagBad(t *testing.T) {
 	}
 }
 
+func TestLinkTypeUnknown(t *testing.T) {
+	output := tempOutput(t)
+
+	flags, err := parseFlags("", []string{"-linktype", "12", "foo", output})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expected := defaultFlags("foo")
+	expected.linkType = layers.LinkType(12)
+
+	requireFlags(t, output, expected, flags)
+
+	// Hex
+	flags, err = parseFlags("", []string{"-linktype", "0xC", "foo", output})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expected = defaultFlags("foo")
+	expected.linkType = layers.LinkType(0xC)
+
+	requireFlags(t, output, expected, flags)
+}
+
 func TestUsage(t *testing.T) {
 	flags, err := parseFlags("", []string{"-help"})
 	if err != flag.ErrHelp {
@@ -228,6 +255,7 @@ func defaultFlags(mapPath string) flags {
 		pcapFile:   nil,
 		quiet:      false,
 		flush:      false,
+		linkType:   layers.LinkTypeEthernet,
 		filterExpr: "",
 		filterOpts: filterOpts{
 			perfPerCPUBuffer: 8192,
@@ -252,7 +280,7 @@ func requireFlags(tb testing.TB, output string, expected, actual flags) {
 
 	// No expected filter, expected filter is filterExpr compiled with libpcap
 	if expected.filterOpts.filter == nil {
-		filter, err := tcpdumpExprToBPF(expected.filterExpr)
+		filter, err := tcpdumpExprToBPF(expected.filterExpr, expected.linkType)
 		if err != nil {
 			tb.Fatalf("Expected filterExpr %v can't be compiled: %v\n", expected.filterExpr, err)
 		}

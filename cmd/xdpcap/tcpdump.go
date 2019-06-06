@@ -9,9 +9,9 @@ import (
 )
 
 // tcpdumpExprToBPF converts a tcpdump / libpcap filter expression to cBPF using libpcap
-func tcpdumpExprToBPF(filterExpr string) ([]bpf.Instruction, error) {
+func tcpdumpExprToBPF(filterExpr string, linkType layers.LinkType) ([]bpf.Instruction, error) {
 	// We treat any != 0 filter return code as a match
-	insns, err := pcap.CompileBPFFilter(layers.LinkTypeEthernet, 1, filterExpr)
+	insns, err := pcap.CompileBPFFilter(linkType, 1, filterExpr)
 	if err != nil {
 		return nil, errors.Wrap(err, "compiling expression to BPF")
 	}
