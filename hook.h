@@ -26,8 +26,10 @@
  *   return XDP_PASS;
  */
 __attribute__((__always_inline__))
-static inline enum xdp_action xdpcap_exit(struct xdp_md *ctx, struct bpf_map_def *hook, enum xdp_action action) {
-	tail_call((void *)ctx, hook, action);
+static inline enum xdp_action xdpcap_exit(struct xdp_md *ctx, void *hook_map, enum xdp_action action) {
+	// tail_call
+	// Some headers define tail_call (Cilium), others bpf_tail_call (kernel self tests). Use the helper ID directly
+	((int (*)(struct xdp_md *, void *, int))12)(ctx, hook_map, action);
 	return action;
 }
 
