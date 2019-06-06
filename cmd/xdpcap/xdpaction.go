@@ -15,6 +15,7 @@ const (
 	xdpDrop
 	xdpPass
 	xdpTx
+	xdpRedirect
 )
 
 // All known XDP actions
@@ -23,6 +24,7 @@ var xdpActions = []xdpAction{
 	xdpDrop,
 	xdpPass,
 	xdpTx,
+	xdpRedirect,
 }
 
 func (a xdpAction) String() string {
@@ -35,6 +37,8 @@ func (a xdpAction) String() string {
 		return "pass"
 	case xdpTx:
 		return "tx"
+	case xdpRedirect:
+		return "redirect"
 	default:
 		return fmt.Sprintf("xdpAction(%d)", a)
 	}

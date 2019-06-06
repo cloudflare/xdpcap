@@ -13,7 +13,7 @@
 	.type = BPF_MAP_TYPE_PROG_ARRAY, \
 	.key_size = sizeof(int), \
 	.value_size = sizeof(int), \
-	.max_entries = 4, \
+	.max_entries = 5, \
 }
 
 /**
