@@ -103,6 +103,17 @@ func TestActionsFlagUnknown(t *testing.T) {
 	expected.filterOpts.actions = []xdpAction{xdpPass, xdpAborted, xdpAction(3)}
 
 	requireFlags(t, output, expected, flags)
+
+	// Hex
+	flags, err = parseFlags("", []string{"-actions", "pass,aborted,0xDE", "foo", output})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expected = defaultFlags("foo")
+	expected.filterOpts.actions = []xdpAction{xdpPass, xdpAborted, xdpAction(0xDE)}
+
+	requireFlags(t, output, expected, flags)
 }
 
 func TestActionsFlagWhitespace(t *testing.T) {
@@ -164,12 +175,14 @@ func defaultFlags(mapPath string) flags {
 		filterOpts: filterOpts{
 			perfPerCPUBuffer: 8192,
 			perfWatermark:    4096,
-			actions:          []xdpAction{xdpAborted, xdpDrop, xdpPass, xdpTx},
+			actions:          []xdpAction{},
 		},
 	}
 }
 
 func requireFlags(tb testing.TB, output string, expected, actual flags) {
+	tb.Helper()
+
 	if actual.pcapFile.Name() != output {
 		tb.Fatalf("Expected output %s, got %s\n", output, actual.pcapFile.Name())
 	}
@@ -181,6 +194,6 @@ func requireFlags(tb testing.TB, output string, expected, actual flags) {
 	expected.FlagSet = actual.FlagSet
 
 	if !reflect.DeepEqual(expected, actual) {
-		tb.Fatalf("Expected: %#v\n\nGot: %#v\n", expected, actual)
+		tb.Fatalf("\nExpected: %#v\nGot     : %#v\n\n", expected, actual)
 	}
 }

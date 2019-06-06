@@ -17,6 +17,14 @@ const (
 	xdpTx
 )
 
+// All known XDP actions
+var xdpActions = []xdpAction{
+	xdpAborted,
+	xdpDrop,
+	xdpPass,
+	xdpTx,
+}
+
 func (a xdpAction) String() string {
 	switch a {
 	case xdpAborted:
@@ -35,22 +43,18 @@ func (a xdpAction) String() string {
 func parseAction(action string) (xdpAction, error) {
 	a := strings.TrimSpace(strings.ToLower(action))
 
-	switch a {
-	case "aborted":
-		return xdpAborted, nil
-	case "drop":
-		return xdpDrop, nil
-	case "pass":
-		return xdpPass, nil
-	case "tx":
-		return xdpTx, nil
-	default:
-		// Accept actions we don't know about using their numeric value
-		unknownAction, err := strconv.Atoi(a)
-		if err != nil {
-			return 0, errors.Errorf("unknown action %s", action)
+	for _, act := range xdpActions {
+		if a == act.String() {
+			return act, nil
 		}
-
-		return xdpAction(unknownAction), nil
 	}
+
+	// Accept actions we don't know about using their numeric value
+	// Base 0 to accept hex 0x values
+	unknownAction, err := strconv.ParseUint(a, 0, 0)
+	if err != nil {
+		return 0, errors.Errorf("unknown action %s", action)
+	}
+
+	return xdpAction(unknownAction), nil
 }
