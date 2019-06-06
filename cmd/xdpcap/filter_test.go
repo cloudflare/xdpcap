@@ -30,7 +30,7 @@ func TestEmptyExpr(t *testing.T) {
 	defer filter.close()
 	discardPerf(t, filter)
 
-	checkActions(t, testOpts, filter, []byte{})
+	checkActions(t, testOpts.actions, filter, []byte{})
 }
 
 func TestUnknownAction(t *testing.T) {
@@ -45,7 +45,34 @@ func TestUnknownAction(t *testing.T) {
 	defer filter.close()
 	discardPerf(t, filter)
 
-	checkActions(t, opts, filter, []byte{})
+	checkActions(t, opts.actions, filter, []byte{})
+}
+
+func TestAllActions(t *testing.T) {
+	opts := testOpts
+	opts.actions = []xdpAction{}
+
+	// progs with actions from 0-9. Only 0-3 are used currently.
+	filter, err := newFilterWithMap(hookMap(t, 10), "ip", opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer filter.close()
+
+	// check all actually used all the slots of the map
+	if len(filter.actions) != 10 {
+		t.Fatal("xdpAll unexpected number of actions")
+	}
+	for i := 0; i < 10; i++ {
+		if filter.actions[i] != xdpAction(i) {
+			t.Fatalf("expected action %v, got %v", xdpAction(i), filter.actions[i])
+		}
+	}
+
+	discardPerf(t, filter)
+
+	// We've already checked that filter.actions is what we expect
+	checkActions(t, filter.actions, filter, []byte{})
 }
 
 func TestMetrics(t *testing.T) {
@@ -54,7 +81,7 @@ func TestMetrics(t *testing.T) {
 	discardPerf(t, filter)
 
 	// Match - 1 packet received, 1 matched
-	checkActions(t, testOpts, filter, []byte{2})
+	checkActions(t, testOpts.actions, filter, []byte{2})
 
 	metrics, err := filter.metrics()
 	if err != nil {
@@ -75,7 +102,7 @@ func TestMetrics(t *testing.T) {
 	}
 
 	// No match - 2 packet received, 1 matched
-	checkActions(t, testOpts, filter, []byte{3})
+	checkActions(t, testOpts.actions, filter, []byte{3})
 
 	metrics, err = filter.metrics()
 	if err != nil {
@@ -109,7 +136,7 @@ func TestPerf(t *testing.T) {
 
 	// Match
 	pktData := []byte{0xde, 0xad, 0xbe, 0xef}
-	checkActions(t, testOpts, filter, pktData)
+	checkActions(t, testOpts.actions, filter, pktData)
 
 	filter.close()
 
@@ -134,7 +161,8 @@ func TestPerf(t *testing.T) {
 
 // checkActions checks that all programs return their expected action, and the packet isn't modified
 // Packet is 0 padded to min ethernet length
-func checkActions(t *testing.T, opts filterOpts, filter *filter, in []byte) {
+// actions should be the original desired actions, and not filter.actions (unless filter.actions is checked beforehand).
+func checkActions(t *testing.T, actions []xdpAction, filter *filter, in []byte) {
 	if len(in) < 14 {
 		t := make([]byte, 14)
 		copy(t, in)
@@ -142,11 +170,11 @@ func checkActions(t *testing.T, opts filterOpts, filter *filter, in []byte) {
 	}
 
 	// Make sure the filter created the correct programs
-	if len(opts.actions) != len(filter.programs) {
+	if len(actions) != len(filter.programs) {
 		t.Fatalf("mismatched number of actions and attached programs")
 	}
 
-	for _, action := range opts.actions {
+	for _, action := range actions {
 		prog, ok := filter.programs[action]
 		if !ok {
 			t.Fatalf("filter missing program for action %v", prog)

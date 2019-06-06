@@ -21,6 +21,7 @@ type filterOpts struct {
 	perfPerCPUBuffer uint
 	perfWatermark    uint
 
+	// Requested actions. If empty or nil, all the actions exposed by the hookMap are used.
 	actions []xdpAction
 }
 
@@ -31,6 +32,7 @@ type filter struct {
 
 	programs map[xdpAction]*program
 
+	// Actual actions we're capturing for.
 	actions []xdpAction
 }
 
@@ -70,6 +72,11 @@ func newFilterWithMap(hookMap *ebpf.Map, expr string, opts filterOpts) (*filter,
 		return nil, errors.Wrap(err, "can't create perf event reader")
 	}
 
+	if len(opts.actions) == 0 {
+		// Ignore all other actions in opts
+		opts.actions = allActions(hookMap)
+	}
+
 	filter := &filter{
 		hookMap:  hookMap,
 		reader:   reader,
@@ -94,6 +101,17 @@ func newFilterWithMap(hookMap *ebpf.Map, expr string, opts filterOpts) (*filter,
 	}
 
 	return filter, nil
+}
+
+// allActions returns every action exposed by the map
+func allActions(hookMap *ebpf.Map) []xdpAction {
+	actions := []xdpAction{}
+
+	for i := 0; i < int(hookMap.ABI().MaxEntries); i++ {
+		actions = append(actions, xdpAction(i))
+	}
+
+	return actions
 }
 
 // no good way to check if a program is already attached, as Create() doesn't work on prog array maps

@@ -66,8 +66,8 @@ func parseFlags(name string, args []string) (flags, error) {
 	flags.BoolVar(&flags.quiet, "q", false, "Don't print statistics")
 	flags.BoolVar(&flags.flush, "flush", false, "Flush pcap data written to <output> for every packet received")
 
-	flags.filterOpts.actions = []xdpAction{xdpAborted, xdpDrop, xdpPass, xdpTx}
-	flags.Var((*actionsFlag)(&flags.filterOpts.actions), "actions", "Comma separated XDP `actions` to capture packets for. Action can be a name, or the enum value")
+	flags.filterOpts.actions = []xdpAction{}
+	flags.Var((*actionsFlag)(&flags.filterOpts.actions), "actions", fmt.Sprintf("XDP `actions` to capture packets for. Comma seperated list of names (%v) or enum values (default all actions exposed by the <debug map>)", xdpActions))
 
 	err := flags.Parse(args)
 	if err != nil {
