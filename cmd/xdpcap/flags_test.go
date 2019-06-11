@@ -174,7 +174,7 @@ func defaultFlags(mapPath string) flags {
 		filterExpr: "",
 		filterOpts: filterOpts{
 			perfPerCPUBuffer: 8192,
-			perfWatermark:    4096,
+			perfWatermark:    1,
 			actions:          []xdpAction{},
 		},
 	}

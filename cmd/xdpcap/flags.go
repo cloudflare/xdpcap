@@ -62,7 +62,7 @@ func parseFlags(name string, args []string) (flags, error) {
 	}
 
 	flags.UintVar(&flags.filterOpts.perfPerCPUBuffer, "buffer", 8192, "Per CPU perf buffer size to create (`bytes`)")
-	flags.UintVar(&flags.filterOpts.perfWatermark, "watermark", 4096, "Perf watermark (`bytes`)")
+	flags.UintVar(&flags.filterOpts.perfWatermark, "watermark", 1, "Perf watermark (`bytes`)")
 	flags.BoolVar(&flags.quiet, "q", false, "Don't print statistics")
 	flags.BoolVar(&flags.flush, "flush", false, "Flush pcap data written to <output> for every packet received")
 
