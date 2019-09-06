@@ -60,8 +60,14 @@ func (h *Hook) Rm() error {
 	return errors.Wrapf(os.Remove(h.fileName), "file %s", h.fileName)
 }
 
-// Patch edits all programs in the spec that refer to hookMapSymbol to use this hook
+// Patch edits all programs in the spec that refer to hookMapSymbol to use this hook.
+//
+// This function is a no-op if called on a nil Hook.
 func (h *Hook) Patch(spec *ebpf.CollectionSpec, hookMapSymbol string) error {
+	if h == nil {
+		return nil
+	}
+
 	collectionAbi := ebpf.CollectionABI{
 		Maps: map[string]*ebpf.MapABI{
 			hookMapSymbol: &HookMapABI,
