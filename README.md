@@ -47,7 +47,7 @@ a program can expose multiple hook points,
 or a hook can be reused across programs by using the same underlying map.
 
 Package [xdpcap](https://godoc.org/github.com/cloudflare/xdpcap) provides a wrapper for
-creating and pinning the hook maps using the [newtools/ebpf](https://godoc.org/github.com/newtools/ebpf) loader.
+creating and pinning the hook maps using the [newtools/ebpf](https://godoc.org/github.com/cilium/ebpf) loader.
 
 
 ## Installation

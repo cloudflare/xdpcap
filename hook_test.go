@@ -3,7 +3,7 @@ package xdpcap
 import (
 	"testing"
 
-	"github.com/newtools/ebpf"
+	"github.com/cilium/ebpf"
 )
 
 const (

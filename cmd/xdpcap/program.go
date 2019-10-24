@@ -1,9 +1,9 @@
 package main
 
 import (
+	"github.com/cilium/ebpf"
+	"github.com/cilium/ebpf/asm"
 	"github.com/cloudflare/cbpfc"
-	"github.com/newtools/ebpf"
-	"github.com/newtools/ebpf/asm"
 	"github.com/pkg/errors"
 	"golang.org/x/net/bpf"
 )
@@ -90,7 +90,7 @@ func newProgram(filter []bpf.Instruction, action xdpAction, perfMap *ebpf.Map) (
 		asm.Add.Imm(asm.R2, -4),
 		asm.StoreImm(asm.R2, 0, 0, asm.Word),
 		// call
-		asm.MapLookupElement.Call(),
+		asm.FnMapLookupElem.Call(),
 
 		// Check metrics aren't nil
 		asm.JEq.Imm(asm.R0, 0, exit),
@@ -148,7 +148,7 @@ func newProgram(filter []bpf.Instruction, action xdpAction, perfMap *ebpf.Map) (
 		// sizeof(data)
 		asm.Mov.Imm(asm.R5, 2*8),
 		// call
-		asm.PerfEventOutput.Call(),
+		asm.FnPerfEventOutput.Call(),
 
 		// Perf success
 		asm.JEq.Imm(asm.R0, 0, exit),
@@ -193,11 +193,9 @@ func (p *program) close() {
 func (p *program) metrics() (metrics, error) {
 	perCpuMetrics := []rawMetrics{}
 
-	ok, err := p.metricsMap.Get(uint32(0), &perCpuMetrics)
+	err := p.metricsMap.Lookup(uint32(0), &perCpuMetrics)
 	if err != nil {
 		return metrics{}, errors.Wrap(err, "accessing metrics map")
-	} else if !ok {
-		return metrics{}, errors.New("metrics map key doesn't exist")
 	}
 
 	metrics := metrics{}
