@@ -4,7 +4,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/newtools/ebpf"
+	"github.com/cilium/ebpf"
+	"github.com/cilium/ebpf/asm"
 	"github.com/pkg/errors"
 )
 
@@ -83,10 +84,9 @@ func (h *Hook) Patch(spec *ebpf.CollectionSpec, hookMapSymbol string) error {
 	// - Rewrite the hook map symbol of every program
 	// - Remove the map from spec (so it isn't created later on)
 	for progName, progSpec := range spec.Programs {
-		err = ebpf.Edit(&progSpec.Instructions).RewriteMap(hookMapSymbol, h.hookMap)
-
+		err = progSpec.Instructions.RewriteMapPtr(hookMapSymbol, h.hookMap.FD())
 		// Not all programs need to use the hook
-		if ebpf.IsUnreferencedSymbol(err) {
+		if asm.IsUnreferencedSymbol(err) {
 			continue
 		}
 

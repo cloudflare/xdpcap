@@ -3,7 +3,8 @@ package main
 import (
 	"github.com/cloudflare/xdpcap"
 
-	"github.com/newtools/ebpf"
+	"github.com/cilium/ebpf"
+	"github.com/cilium/ebpf/perf"
 	"github.com/pkg/errors"
 	"golang.org/x/net/bpf"
 )
@@ -19,8 +20,8 @@ var perfMapSpec = ebpf.MapSpec{
 }
 
 type filterOpts struct {
-	perfPerCPUBuffer uint
-	perfWatermark    uint
+	perfPerCPUBuffer int
+	perfWatermark    int
 
 	// Requested actions. If empty or nil, all the actions exposed by the hookMap are used.
 	actions []xdpAction
@@ -30,7 +31,7 @@ type filterOpts struct {
 // filter represents a filter loaded into the kernel
 type filter struct {
 	hookMap *ebpf.Map
-	reader  *ebpf.PerfReader
+	reader  *perf.Reader
 
 	programs map[xdpAction]*program
 
@@ -63,11 +64,10 @@ func newFilterWithMap(hookMap *ebpf.Map, opts filterOpts) (*filter, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "creating perf map")
 	}
+	defer perfMap.Close()
 
-	reader, err := ebpf.NewPerfReader(ebpf.PerfReaderOptions{
-		Map:          perfMap,
-		PerCPUBuffer: int(opts.perfPerCPUBuffer),
-		Watermark:    int(opts.perfWatermark),
+	reader, err := perf.NewReaderWithOptions(perfMap, opts.perfPerCPUBuffer, perf.ReaderOptions{
+		Watermark: opts.perfWatermark,
 	})
 	if err != nil {
 		return nil, errors.Wrap(err, "can't create perf event reader")
@@ -136,46 +136,41 @@ func (f *filter) close() error {
 		prog.close()
 	}
 
-	f.reader.FlushAndClose()
+	f.reader.Close()
 
 	return errors.Wrap(err, "detaching filter programs")
 }
 
-func (f *filter) forward(packets chan<- packet, errs chan<- error) {
-	for {
-		select {
-		case pkt, ok := <-f.reader.Samples:
-			if !ok {
-				return
-			}
-
-			// The sample format is as follows:
-			// <u64: action> <u64: length> <byte * length: raw packet including L2 headers> <padding to 64bits>
-			if len(pkt.Data) < 16 {
-				errs <- errors.New("perf packet data < 16 bytes")
-				continue
-			}
-
-			action := xdpAction(nativeEndian.Uint64(pkt.Data[:8]))
-			length := int(nativeEndian.Uint64(pkt.Data[8:16]))
-			data := pkt.Data[16:]
-
-			if len(pkt.Data) < length {
-				errs <- errors.New("perf packet truncated")
-				continue
-			}
-
-			data = data[:length]
-
-			packets <- packet{
-				action: action,
-				data:   data,
-			}
-
-		case err := <-f.reader.Error:
-			errs <- err
-		}
+func (f *filter) read() (packet, error) {
+	record, err := f.reader.Read()
+	if err != nil {
+		return packet{}, err
 	}
+
+	if record.LostSamples > 0 {
+		return packet{}, errors.Errorf("lost %d packets", record.LostSamples)
+	}
+
+	raw := record.RawSample
+
+	// The sample format is as follows:
+	// <u64: action> <u64: length> <byte * length: raw packet including L2 headers> <padding to 64bits>
+	if len(raw) < 16 {
+		return packet{}, errors.New("perf packet data < 16 bytes")
+	}
+
+	action := xdpAction(nativeEndian.Uint64(raw[:8]))
+	length := int(nativeEndian.Uint64(raw[8:16]))
+	data := raw[16:]
+
+	if len(data) < length {
+		return packet{}, errors.New("perf packet truncated")
+	}
+
+	return packet{
+		action: action,
+		data:   data[:length],
+	}, nil
 }
 
 func (f *filter) metrics() (map[xdpAction]metrics, error) {

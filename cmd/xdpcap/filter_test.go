@@ -7,14 +7,13 @@ import (
 
 	"github.com/cloudflare/xdpcap"
 
-	"github.com/newtools/ebpf"
+	"github.com/cilium/ebpf"
 	"golang.org/x/net/bpf"
 )
 
 func testOpts(filter ...bpf.Instruction) filterOpts {
 	return filterOpts{
 		perfPerCPUBuffer: 8192,
-		perfWatermark:    4096,
 		actions:          []xdpAction{xdpAborted, xdpDrop, xdpPass, xdpTx},
 		filter:           filter,
 	}
@@ -55,7 +54,6 @@ func TestUnknownAction(t *testing.T) {
 
 	filter := mustNew(t, opts)
 	defer filter.close()
-	discardPerf(t, filter)
 
 	checkActions(t, opts.actions, filter, []byte{})
 }
@@ -81,8 +79,6 @@ func TestAllActions(t *testing.T) {
 		}
 	}
 
-	discardPerf(t, filter)
-
 	// We've already checked that filter.actions is what we expect
 	checkActions(t, filter.actions, filter, []byte{})
 }
@@ -91,7 +87,6 @@ func TestMetrics(t *testing.T) {
 	opts := testOpts(matchByte(0, 2)...)
 	filter := mustNew(t, opts)
 	defer filter.close()
-	discardPerf(t, filter)
 
 	// Match - 1 packet received, 1 matched
 	checkActions(t, opts.actions, filter, []byte{2})
@@ -141,34 +136,26 @@ func TestPerf(t *testing.T) {
 	filter := mustNew(t, opts)
 	defer filter.close()
 
-	// Buffered so we can close the filter (which FlushAndCloses the perf reader),
-	// without having to concurrently read from packets
-	packets := make(chan packet, len(opts.actions))
-	errors := make(chan error)
-
-	go filter.forward(packets, errors)
-
 	// Match
 	pktData := []byte{0xde, 0xad, 0xbe, 0xef}
-	checkActions(t, opts.actions, filter, pktData)
-
-	filter.close()
 
 	for _, action := range opts.actions {
-		select {
-		case pkt := <-packets:
-			if len(pkt.data) < len(pktData) {
-				t.Fatalf("action %v: unexpected packet length", action)
-			}
+		checkAction(t, action, filter, pktData)
 
-			if !bytes.Equal(pktData, pkt.data[:len(pktData)]) {
-				t.Fatalf("action %v: unexpected packet contents", action)
-			}
+		pkt, err := filter.read()
+		if err != nil {
+			t.Errorf("action %v: %s", action, err)
+			continue
+		}
 
-			return
+		if len(pkt.data) < len(pktData) {
+			t.Errorf("action %v: unexpected packet length", action)
+			continue
+		}
 
-		case err := <-errors:
-			t.Fatal(err)
+		if !bytes.Equal(pktData, pkt.data[:len(pktData)]) {
+			t.Errorf("action %v: unexpected packet contents", action)
+			continue
 		}
 	}
 }
@@ -177,11 +164,7 @@ func TestPerf(t *testing.T) {
 // Packet is 0 padded to min ethernet length
 // actions should be the original desired actions, and not filter.actions (unless filter.actions is checked beforehand).
 func checkActions(t *testing.T, actions []xdpAction, filter *filter, in []byte) {
-	if len(in) < 14 {
-		t := make([]byte, 14)
-		copy(t, in)
-		in = t
-	}
+	t.Helper()
 
 	// Make sure the filter created the correct programs
 	if len(actions) != len(filter.programs) {
@@ -189,25 +172,45 @@ func checkActions(t *testing.T, actions []xdpAction, filter *filter, in []byte) 
 	}
 
 	for _, action := range actions {
-		prog, ok := filter.programs[action]
-		if !ok {
-			t.Fatalf("filter missing program for action %v", prog)
-		}
+		checkAction(t, action, filter, in)
+	}
+}
 
-		ret, out, err := prog.program.Test(in)
-		if err != nil {
-			t.Fatal(err)
-		}
+func checkAction(t *testing.T, action xdpAction, filter *filter, in []byte) {
+	t.Helper()
 
-		if !bytes.Equal(in, out) {
-			t.Fatalf("Program modified input:\nIn: %v\nOut: %v\n", in, out)
-		}
+	if len(in) < 14 {
+		t := make([]byte, 14)
+		copy(t, in)
+		in = t
+	}
 
-		retAction := xdpAction(ret)
+	prog, ok := filter.programs[action]
+	if !ok {
+		t.Fatalf("filter missing program for action %v", prog)
+	}
 
-		if retAction != action {
-			t.Fatalf("Program returned %v, expected %v\n", retAction, action)
-		}
+	ret, out, err := prog.program.Test(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !bytes.Equal(in, out) {
+		t.Fatalf("Program modified input:\nIn: %v\nOut: %v\n", in, out)
+	}
+
+	retAction := xdpAction(ret)
+	if retAction != action {
+		t.Fatalf("Program returned %v, expected %v\n", retAction, action)
+	}
+
+	metrics, err := prog.metrics()
+	if err != nil {
+		t.Fatal("Can't retrieve metrics:", err)
+	}
+
+	if metrics.perfOutputErrors > 0 {
+		t.Fatal("Couldn't write packet")
 	}
 }
 
@@ -237,23 +240,4 @@ func mustNew(t *testing.T, opts filterOpts) *filter {
 	}
 
 	return filter
-}
-
-// read and discard perf packets & errors
-// required to Filter.Close() for tests that don't care about perf
-func discardPerf(t *testing.T, filter *filter) {
-	t.Helper()
-
-	packets := make(chan packet)
-	errors := make(chan error)
-
-	go filter.forward(packets, errors)
-	go func() {
-		for {
-			select {
-			case <-packets:
-			case <-errors:
-			}
-		}
-	}()
 }

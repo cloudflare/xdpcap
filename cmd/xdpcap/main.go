@@ -104,38 +104,32 @@ func capture(flags flags) error {
 		}()
 	}
 
-	// Aggregate packets of all programs of the filter
-	packets := make(chan packet)
-	errors := make(chan error)
-
-	go filter.forward(packets, errors)
-
 	// Write out a pcap file from aggregated packets
 	go func() {
 		for {
-			select {
-			case pkt := <-packets:
-				info := gopacket.CaptureInfo{
-					Timestamp:      time.Now(),
-					CaptureLength:  len(pkt.data),
-					Length:         len(pkt.data),
-					InterfaceIndex: interfaces[pkt.action],
-				}
+			pkt, err := filter.read()
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "Error:", err)
+				continue
+			}
 
-				err := pcapWriter.WritePacket(info, pkt.data)
+			info := gopacket.CaptureInfo{
+				Timestamp:      time.Now(),
+				CaptureLength:  len(pkt.data),
+				Length:         len(pkt.data),
+				InterfaceIndex: interfaces[pkt.action],
+			}
+
+			err = pcapWriter.WritePacket(info, pkt.data)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "Error writing packet:", err)
+			}
+
+			if flags.flush {
+				err = pcapWriter.Flush()
 				if err != nil {
-					fmt.Fprintln(os.Stderr, "Error writing packet:", err)
+					fmt.Fprintln(os.Stderr, "Error flushing data:", err)
 				}
-
-				if flags.flush {
-					err = pcapWriter.Flush()
-					if err != nil {
-						fmt.Fprintln(os.Stderr, "Error flushing data:", err)
-					}
-				}
-
-			case err := <-errors:
-				fmt.Fprintln(os.Stderr, "Error receiving packet:", err)
 			}
 		}
 	}()
