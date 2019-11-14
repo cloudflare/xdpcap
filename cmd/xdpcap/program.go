@@ -35,11 +35,6 @@ var metricsSpec = ebpf.MapSpec{
 	MaxEntries: 1,
 }
 
-// abi of map for exporting packets
-var perfABI = ebpf.MapABI{
-	Type: ebpf.PerfEventArray,
-}
-
 // program represents a filter program for a particular XDP action
 type program struct {
 	program    *ebpf.Program
@@ -53,9 +48,8 @@ func newProgram(filter []bpf.Instruction, action xdpAction, perfMap *ebpf.Map) (
 		return nil, errors.Wrap(err, "creating metrics map")
 	}
 
-	err = perfABI.Check(perfMap)
-	if err != nil {
-		return nil, errors.Wrap(err, "invalid perf map ABI")
+	if perfMap.ABI().Type != ebpf.PerfEventArray {
+		return nil, errors.Errorf("invalid perf map ABI, expected type %s, have %s", ebpf.PerfEventArray, perfMap.ABI().Type)
 	}
 
 	// Labels of blocks

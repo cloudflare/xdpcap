@@ -69,22 +69,15 @@ func (h *Hook) Patch(spec *ebpf.CollectionSpec, hookMapSymbol string) error {
 		return nil
 	}
 
-	collectionAbi := ebpf.CollectionABI{
-		Maps: map[string]*ebpf.MapABI{
-			hookMapSymbol: &HookMapABI,
-		},
-	}
-
-	err := collectionAbi.CheckSpec(spec)
-	if err != nil {
-		return err
+	if spec.Maps[hookMapSymbol] == nil {
+		return errors.Errorf("missing map %s", hookMapSymbol)
 	}
 
 	// We can't specify to use an already existing map in a spec, so:
 	// - Rewrite the hook map symbol of every program
 	// - Remove the map from spec (so it isn't created later on)
 	for progName, progSpec := range spec.Programs {
-		err = progSpec.Instructions.RewriteMapPtr(hookMapSymbol, h.hookMap.FD())
+		err := progSpec.Instructions.RewriteMapPtr(hookMapSymbol, h.hookMap.FD())
 		// Not all programs need to use the hook
 		if asm.IsUnreferencedSymbol(err) {
 			continue
