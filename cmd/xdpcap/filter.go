@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/cloudflare/xdpcap"
+	"github.com/cloudflare/xdpcap/internal"
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/perf"
@@ -55,7 +55,7 @@ func newFilterWithMap(hookMap *ebpf.Map, opts filterOpts) (*filter, error) {
 		return nil, errors.New("at least one filter cBPF instruction required")
 	}
 
-	err := xdpcap.HookMapABI.Check(hookMap)
+	err := internal.CheckHookMap(hookMap)
 	if err != nil {
 		return nil, errors.Wrap(err, "invalid hook map ABI")
 	}
