@@ -108,7 +108,10 @@ func capture(flags flags) error {
 	go func() {
 		for {
 			pkt, err := filter.read()
-			if err != nil {
+			switch {
+			case err == errFilterClosed:
+				return
+			case err != nil:
 				fmt.Fprintln(os.Stderr, "Error:", err)
 				continue
 			}

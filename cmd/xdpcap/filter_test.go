@@ -160,6 +160,20 @@ func TestPerf(t *testing.T) {
 	}
 }
 
+func TestClose(t *testing.T) {
+	opts := testOpts(matchByte(0, 2)...)
+	filter := mustNew(t, opts)
+
+	if err := filter.close(); err != nil {
+		t.Fatalf("Error closing filter: %v", err)
+	}
+
+	_, err := filter.read()
+	if err != errFilterClosed {
+		t.Fatalf("closed filter read")
+	}
+}
+
 // checkActions checks that all programs return their expected action, and the packet isn't modified
 // Packet is 0 padded to min ethernet length
 // actions should be the original desired actions, and not filter.actions (unless filter.actions is checked beforehand).

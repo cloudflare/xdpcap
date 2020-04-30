@@ -141,9 +141,15 @@ func (f *filter) close() error {
 	return errors.Wrap(err, "detaching filter programs")
 }
 
+var errFilterClosed = errors.New("filter closed")
+
+// Returns errFilterClosed if the filter has been closed
 func (f *filter) read() (packet, error) {
 	record, err := f.reader.Read()
-	if err != nil {
+	switch {
+	case perf.IsClosed(err):
+		return packet{}, errFilterClosed
+	case err != nil:
 		return packet{}, err
 	}
 
