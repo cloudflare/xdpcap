@@ -1,23 +1,14 @@
 package internal
 
 import (
-	"github.com/cilium/ebpf"
-	"github.com/cloudflare/xdpcap"
 	"testing"
-)
 
-const hookSymbol = "foo"
+	"github.com/cilium/ebpf"
+)
 
 // Test CheckHookMap with valid and invalid HookMap ABI
 func TestCheckHookMap(t *testing.T) {
-	scpec := &ebpf.MapSpec{
-		Name:       ebpf.SanitizeName(hookSymbol, '_'),
-		Type:       xdpcap.HookMapABI.Type,
-		KeySize:    xdpcap.HookMapABI.KeySize,
-		ValueSize:  xdpcap.HookMapABI.ValueSize,
-		MaxEntries: 4,
-	}
-	valid, err := ebpf.NewMap(scpec)
+	valid, err := ebpf.NewMap(HookMapSpec)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -27,8 +18,9 @@ func TestCheckHookMap(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	scpec.Type = ebpf.Array
-	inValid, err := ebpf.NewMap(scpec)
+	spec := HookMapSpec.Copy()
+	spec.Type = ebpf.Array
+	inValid, err := ebpf.NewMap(spec)
 	if err != nil {
 		t.Fatal(err)
 	}

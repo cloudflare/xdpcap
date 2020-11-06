@@ -5,7 +5,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/cloudflare/xdpcap"
+	"github.com/cloudflare/xdpcap/internal"
 
 	"github.com/cilium/ebpf"
 	"golang.org/x/net/bpf"
@@ -71,7 +71,7 @@ func TestAllActions(t *testing.T) {
 
 	// check all actually used all the slots of the map
 	if len(filter.actions) != 10 {
-		t.Fatal("xdpAll unexpected number of actions")
+		t.Fatal("xdpAll unexpected number of actions:", len(filter.actions))
 	}
 	for i := 0; i < 10; i++ {
 		if filter.actions[i] != xdpAction(i) {
@@ -231,16 +231,13 @@ func checkAction(t *testing.T, action xdpAction, filter *filter, in []byte) {
 func hookMap(t *testing.T, entries int) *ebpf.Map {
 	t.Helper()
 
-	hookMap, err := ebpf.NewMap(&ebpf.MapSpec{
-		Type:       xdpcap.HookMapABI.Type,
-		KeySize:    xdpcap.HookMapABI.KeySize,
-		ValueSize:  xdpcap.HookMapABI.ValueSize,
-		MaxEntries: uint32(entries),
-	})
-
+	spec := internal.HookMapSpec.Copy()
+	spec.MaxEntries = uint32(entries)
+	hookMap, err := ebpf.NewMap(spec)
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { hookMap.Close() })
 
 	return hookMap
 }

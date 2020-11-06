@@ -1,9 +1,11 @@
 github.com/cilium/ebpf v0.0.0-20191024101557-7dc533ea7755 h1:rtv1yoAAvNBtuzv1K7imUJgB0RAF6LC61qUHQ2MZT20=
 github.com/cilium/ebpf v0.0.0-20191024101557-7dc533ea7755/go.mod h1:MA5e5Lr8slmEg9bt0VpxxWqJlO4iwu3FBdHUzV7wQVg=
-github.com/cilium/ebpf v0.0.0-20200430085911-a0f791bb51cb h1:drJ3dIxT8Nga1fJqPyMn+ZheZQeVscNw+4YKJkSLVSw=
-github.com/cilium/ebpf v0.0.0-20200430085911-a0f791bb51cb/go.mod h1:XT+cAw5wfvsodedcijoh1l9cf7v1x9FlFB/3VmF/O8s=
+github.com/cilium/ebpf v0.1.0 h1:x/yQklFd+2dSQXS077Yn5nHkQ1+xXPP21HpjXyPEKF0=
+github.com/cilium/ebpf v0.1.0/go.mod h1:To2CFviqOWL/M0gIMsvSMlqe7em/l1ALkX1PyjrX2Qs=
 github.com/cloudflare/cbpfc v0.0.0-20191024102745-5470c854fd38 h1:D5rGShqKLHli2Ix0SEzPw9BmYxlD6vHwrXcgBVan+jc=
 github.com/cloudflare/cbpfc v0.0.0-20191024102745-5470c854fd38/go.mod h1:wJRgDYys03AoU7bpcBinqBG3oWfBqWfwSTXr0tsU8Bw=
+github.com/google/go-cmp v0.5.2 h1:X2ev0eStA3AbceY54o37/0PQ/UWqKEiiO2dKL5OPaFM=
+github.com/google/go-cmp v0.5.2/go.mod h1:v8dTdLbMG2kIc/vJvl+f65V22dbkXbowE6jgT/gNBxE=
 github.com/google/gopacket v1.1.17 h1:rMrlX2ZY2UbvT+sdz3+6J+pp2z+msCq9MxTU6ymxbBY=
 github.com/google/gopacket v1.1.17/go.mod h1:UdDNZ1OO62aGYVnPhxT1U6aI7ukYtA/kB8vaU0diBUM=
 github.com/pkg/errors v0.8.1 h1:iURUrRGxPUNPdy5/HRSm+Yj6okJ6UtLINN0Q9M4+h3I=

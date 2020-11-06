@@ -2,24 +2,30 @@ package internal
 
 import (
 	"github.com/cilium/ebpf"
-	"github.com/cloudflare/xdpcap"
 	"github.com/pkg/errors"
 )
+
+// HookMapSpec is the ABI of the underlying prog map created
+var HookMapSpec = &ebpf.MapSpec{
+	Type:       ebpf.ProgramArray,
+	KeySize:    4, // sizeof(int)
+	ValueSize:  4, // sizeof(int)
+	MaxEntries: 4, // current number of XDP actions
+}
 
 // CheckHookMap checks the given map against HookMapABI to have appropriate values
 // Only checks Type, KeySize, ValueSize
 func CheckHookMap(m *ebpf.Map) error {
-	abi := m.ABI()
-	if abi.Type != xdpcap.HookMapABI.Type {
-		return errors.Errorf("expected map type %s, have %s", xdpcap.HookMapABI.Type, abi.Type)
+	if m.Type() != HookMapSpec.Type {
+		return errors.Errorf("expected map type %s, have %s", HookMapSpec.Type, m.Type())
 	}
 
-	if abi.KeySize != xdpcap.HookMapABI.KeySize {
-		return errors.Errorf("expected key size to be %d, have %d", xdpcap.HookMapABI.KeySize, abi.KeySize)
+	if m.KeySize() != HookMapSpec.KeySize {
+		return errors.Errorf("expected key size to be %d, have %d", HookMapSpec.KeySize, m.KeySize())
 	}
 
-	if abi.ValueSize != xdpcap.HookMapABI.ValueSize {
-		return errors.Errorf("expected value size to be %d, have %d", xdpcap.HookMapABI.ValueSize, abi.ValueSize)
+	if m.ValueSize() != HookMapSpec.ValueSize {
+		return errors.Errorf("expected value size to be %d, have %d", HookMapSpec.ValueSize, m.ValueSize())
 	}
 
 	return nil

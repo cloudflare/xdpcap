@@ -108,7 +108,7 @@ func newFilterWithMap(hookMap *ebpf.Map, opts filterOpts) (*filter, error) {
 func allActions(hookMap *ebpf.Map) []xdpAction {
 	actions := []xdpAction{}
 
-	for i := 0; i < int(hookMap.ABI().MaxEntries); i++ {
+	for i := 0; i < int(hookMap.MaxEntries()); i++ {
 		actions = append(actions, xdpAction(i))
 	}
 
