@@ -4,17 +4,12 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/cloudflare/xdpcap/internal"
+
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/asm"
 	"github.com/pkg/errors"
 )
-
-// HookMapABI is the ABI of the underlying prog map created
-var HookMapABI = ebpf.MapABI{
-	Type:      ebpf.ProgramArray,
-	KeySize:   4, // sizeof(int)
-	ValueSize: 4, // sizeof(int)
-}
 
 // Hook represents an xdpcap hook point.
 // This hook can be reused with several programs.
@@ -26,13 +21,10 @@ type Hook struct {
 // NewHook creates a new Hook, that can be Pin()'d to fileName.
 // fileName must be inside a bpffs
 func NewHook(fileName string) (*Hook, error) {
-	hookMap, err := ebpf.NewMap(&ebpf.MapSpec{
-		Name:       ebpf.SanitizeName(filepath.Base(fileName), '_'),
-		Type:       HookMapABI.Type,
-		KeySize:    HookMapABI.KeySize,
-		ValueSize:  HookMapABI.ValueSize,
-		MaxEntries: 4, // current number of XDP actions
-	})
+	spec := internal.HookMapSpec.Copy()
+	spec.Name = ebpf.SanitizeName(filepath.Base(fileName), '_')
+
+	hookMap, err := ebpf.NewMap(spec)
 	if err != nil {
 		return nil, errors.Wrap(err, "creating hook map")
 	}

@@ -48,8 +48,8 @@ func newProgram(filter []bpf.Instruction, action xdpAction, perfMap *ebpf.Map) (
 		return nil, errors.Wrap(err, "creating metrics map")
 	}
 
-	if perfMap.ABI().Type != ebpf.PerfEventArray {
-		return nil, errors.Errorf("invalid perf map ABI, expected type %s, have %s", ebpf.PerfEventArray, perfMap.ABI().Type)
+	if perfMap.Type() != ebpf.PerfEventArray {
+		return nil, errors.Errorf("invalid perf map ABI, expected type %s, have %s", ebpf.PerfEventArray, perfMap.Type())
 	}
 
 	// Labels of blocks
