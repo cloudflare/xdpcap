@@ -200,7 +200,7 @@ func parseFlags(name string, args []string) (flags, error) {
 	flags.BoolVar(&flags.flush, "flush", false, "Flush pcap data written to <output> for every packet received")
 
 	flags.filterOpts.actions = []xdpAction{}
-	flags.Var((*actionsFlag)(&flags.filterOpts.actions), "actions", fmt.Sprintf("XDP `actions` to capture packets for. Comma seperated list of names (%v) or enum values (default all actions exposed by the <debug map>)", xdpActions))
+	flags.Var((*actionsFlag)(&flags.filterOpts.actions), "actions", fmt.Sprintf("XDP `actions` to capture packets for. Comma separated list of names (%v) or enum values (default all actions exposed by the <debug map>)", xdpActions))
 
 	flags.linkType = layers.LinkTypeEthernet
 	flags.Var((*linkTypeFlag)(&flags.linkType), "linktype", fmt.Sprintf("Linktype to use when compiling <filter expr>. Name (%v) or enum value", linkTypes()))
