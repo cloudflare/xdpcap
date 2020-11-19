@@ -1,0 +1,27 @@
+# Anytime we push to any branch
+on: push
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-18.04
+
+    steps:
+    - name: Set up Go 1.x
+      uses: actions/setup-go@v2
+      with:
+        go-version: ^1.15
+
+    - name: Check out code into the Go module directory
+      uses: actions/checkout@v2
+
+    - name: Install libpcap
+      run: sudo apt-get install -y libpcap0.8-dev
+
+    - name: Check lint
+      # gofmt doesn't report any changes
+      run: test -z $(gofmt -l ./ | tee /dev/stderr)
+
+    - name: Run tests
+      # tests need to run as root to load XDP programs
+      run: sudo -E env "PATH=$PATH" go test ./...
