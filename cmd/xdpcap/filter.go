@@ -41,7 +41,7 @@ type filter struct {
 
 // newFilter creates a filter from a tcpdump / libpcap filter expression
 func newFilter(hookMapPath string, opts filterOpts) (*filter, error) {
-	hookMap, err := ebpf.LoadPinnedMap(hookMapPath)
+	hookMap, err := ebpf.LoadPinnedMap(hookMapPath, nil)
 	if err != nil {
 		return nil, errors.Wrapf(err, "loading hook map")
 	}
