@@ -7,7 +7,6 @@ import (
 	"github.com/cloudflare/xdpcap/internal"
 
 	"github.com/cilium/ebpf"
-	"github.com/cilium/ebpf/asm"
 	"github.com/pkg/errors"
 )
 
@@ -61,26 +60,7 @@ func (h *Hook) Patch(spec *ebpf.CollectionSpec, hookMapSymbol string) error {
 		return nil
 	}
 
-	if spec.Maps[hookMapSymbol] == nil {
-		return errors.Errorf("missing map %s", hookMapSymbol)
-	}
-
-	// We can't specify to use an already existing map in a spec, so:
-	// - Rewrite the hook map symbol of every program
-	// - Remove the map from spec (so it isn't created later on)
-	for progName, progSpec := range spec.Programs {
-		err := progSpec.Instructions.RewriteMapPtr(hookMapSymbol, h.hookMap.FD())
-		// Not all programs need to use the hook
-		if asm.IsUnreferencedSymbol(err) {
-			continue
-		}
-
-		if err != nil {
-			return errors.Wrapf(err, "program %s", progName)
-		}
-	}
-
-	delete(spec.Maps, hookMapSymbol)
-
-	return nil
+	return spec.RewriteMaps(map[string]*ebpf.Map{
+		hookMapSymbol: h.hookMap,
+	})
 }
