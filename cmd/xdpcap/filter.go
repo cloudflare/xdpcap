@@ -147,7 +147,7 @@ var errFilterClosed = errors.New("filter closed")
 func (f *filter) read() (packet, error) {
 	record, err := f.reader.Read()
 	switch {
-	case perf.IsClosed(err):
+	case errors.Is(err, perf.ErrClosed):
 		return packet{}, errFilterClosed
 	case err != nil:
 		return packet{}, err
