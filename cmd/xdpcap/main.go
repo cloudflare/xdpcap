@@ -37,7 +37,7 @@ func main() {
 	flags, err := parseFlags(os.Args[0], os.Args[1:])
 	switch {
 	case err == flag.ErrHelp:
-		fmt.Fprintf(os.Stderr, flags.Usage())
+		fmt.Fprintln(os.Stderr, flags.Usage())
 		os.Exit(0)
 
 	case err != nil:
