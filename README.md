@@ -49,6 +49,11 @@ or a hook can be reused across programs by using the same underlying map.
 Package [xdpcap](https://godoc.org/github.com/cloudflare/xdpcap) provides a wrapper for
 creating and pinning the hook maps using the [newtools/ebpf](https://godoc.org/github.com/cilium/ebpf) loader.
 
+`xdpcap` supports attaching to XDP programs loaded with the
+`BPF_F_XDP_HAS_FRAGS` flag (annotated with `xdp.frags`). It will attempt to
+attach itself as usual to the XDP program and if that fails, it will retry
+with the `BPF_F_XDP_HAS_FRAGS` flag.
+
 
 ## Installation
 
@@ -71,6 +76,10 @@ If the program modifies the packet,
 the filter should match the modified packet,
 not the original input packet.
 
+* capturing multi-buffer packets
+`xdpcap` is currently unable to capture more than the first page of a packet.
+If the instrumented XDP program is loaded with `BPF_F_XDP_HAS_FRAGS`, then
+packets that span multiple physical pages won't be entirely captured.
 
 ## Tests
 
