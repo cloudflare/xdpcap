@@ -68,6 +68,10 @@ with the `BPF_F_XDP_HAS_FRAGS` flag.
 * Display captured packets:
 `sudo xdpcap /path/to/pinned/map - "tcp and port 80" | sudo tcpdump -r -`
 
+if you wish to see the verifier logs in cases where the program fails the checks
+you can use the `-print-verifier-logs` flag. You can control the size of the buffer
+for the verifier logs using the flag `-verifier-log-size`.
+
 
 ## Limitations
 

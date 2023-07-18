@@ -40,7 +40,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestMissingFilter(t *testing.T) {
-	_, err := newFilterWithMap(hookMap(t, 1), testOpts())
+	_, err := newFilterWithMap(hookMap(t, 1), testOpts(), ebpf.ProgramOptions{})
 	if err == nil {
 		t.Fatal("empty filter accepted")
 	}
@@ -85,7 +85,7 @@ func TestFilterProgramForAllModes(t *testing.T) {
 
 			opts := testOpts(bpf.RetConstant{Val: 0})
 			opts.actions = []xdpAction{xdpPass}
-			filter, err := newFilterWithMap(hookMap, opts)
+			filter, err := newFilterWithMap(hookMap, opts, ebpf.ProgramOptions{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -116,7 +116,7 @@ func TestAllActions(t *testing.T) {
 	opts.actions = []xdpAction{}
 
 	// progs with actions from 0-9. Only 0-3 are used currently.
-	filter, err := newFilterWithMap(hookMap(t, 10), opts)
+	filter, err := newFilterWithMap(hookMap(t, 10), opts, ebpf.ProgramOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -298,7 +298,7 @@ func hookMap(t *testing.T, entries int) *ebpf.Map {
 func mustNew(t *testing.T, opts filterOpts) *filter {
 	t.Helper()
 
-	filter, err := newFilterWithMap(hookMap(t, len(opts.actions)), opts)
+	filter, err := newFilterWithMap(hookMap(t, len(opts.actions)), opts, ebpf.ProgramOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
