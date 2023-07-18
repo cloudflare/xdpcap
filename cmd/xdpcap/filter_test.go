@@ -8,7 +8,9 @@ import (
 	"github.com/cloudflare/xdpcap/internal"
 
 	"github.com/cilium/ebpf"
+	"github.com/cilium/ebpf/asm"
 	"golang.org/x/net/bpf"
+	"golang.org/x/sys/unix"
 )
 
 func testOpts(filter ...bpf.Instruction) filterOpts {
@@ -42,6 +44,57 @@ func TestMissingFilter(t *testing.T) {
 	if err == nil {
 		t.Fatal("empty filter accepted")
 	}
+}
+
+func TestFilterProgramForAllModes(t *testing.T) {
+	testFunc := func(xdpFragsEnabled bool) func(t *testing.T) {
+		return func(t *testing.T) {
+			hookMapSpec := internal.HookMapSpec.Copy()
+			hookMapSpec.Name = "test_mode_hook_map"
+			hookMap, err := ebpf.NewMap(hookMapSpec)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			entrrypointSpec := &ebpf.ProgramSpec{
+				Type: ebpf.XDP,
+				Instructions: asm.Instructions{
+					// Context is already in R1.
+					asm.LoadMapPtr(asm.R2, hookMap.FD()),
+					asm.Mov.Imm(asm.R3, int32(xdpPass)),
+					asm.FnTailCall.Call(),
+					asm.Mov.Imm(asm.R0, int32(xdpPass)),
+					asm.Return(),
+				},
+			}
+
+			if xdpFragsEnabled {
+				entrrypointSpec.Flags = unix.BPF_F_XDP_HAS_FRAGS
+			}
+
+			entrypoint, err := ebpf.NewProgram(entrrypointSpec)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			_, err = entrypoint.Run(&ebpf.RunOptions{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer entrypoint.Close()
+
+			opts := testOpts(bpf.RetConstant{Val: 0})
+			opts.actions = []xdpAction{xdpPass}
+			filter, err := newFilterWithMap(hookMap, opts)
+			if err != nil {
+				t.Fatal(err)
+			}
+			filter.close()
+		}
+	}
+
+	t.Run("linear_buffer", testFunc(false))
+	t.Run("xdp_frags", testFunc(true))
 }
 
 func TestUnknownAction(t *testing.T) {

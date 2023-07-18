@@ -6,6 +6,7 @@ import (
 	"github.com/cloudflare/cbpfc"
 	"github.com/pkg/errors"
 	"golang.org/x/net/bpf"
+	"golang.org/x/sys/unix"
 )
 
 const BPF_F_CURRENT_CPU int64 = 0xFFFFFFFF
@@ -42,7 +43,7 @@ type program struct {
 }
 
 // newProgram builds an eBPF program that copies packets matching a cBPF program to userspace via perf
-func newProgram(filter []bpf.Instruction, action xdpAction, perfMap *ebpf.Map) (*program, error) {
+func newProgram(filter []bpf.Instruction, action xdpAction, perfMap *ebpf.Map, xdpFragsMode bool) (*program, error) {
 	metricsMap, err := ebpf.NewMap(&metricsSpec)
 	if err != nil {
 		return nil, errors.Wrap(err, "creating metrics map")
@@ -161,14 +162,17 @@ func newProgram(filter []bpf.Instruction, action xdpAction, perfMap *ebpf.Map) (
 		asm.Return(),
 	)
 
-	prog, err := ebpf.NewProgram(
-		&ebpf.ProgramSpec{
-			Name:         "xdpcap_filter",
-			Type:         ebpf.XDP,
-			Instructions: insns,
-			License:      "GPL",
-		},
-	)
+	progSpec := &ebpf.ProgramSpec{
+		Name:         "xdpcap_filter",
+		Type:         ebpf.XDP,
+		Instructions: insns,
+		License:      "GPL",
+	}
+	if xdpFragsMode {
+		progSpec.Flags = progSpec.Flags | unix.BPF_F_XDP_HAS_FRAGS
+	}
+
+	prog, err := ebpf.NewProgram(progSpec)
 	if err != nil {
 		return nil, errors.Wrap(err, "loading filter")
 	}
