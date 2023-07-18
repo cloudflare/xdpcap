@@ -1,12 +1,16 @@
 package main
 
 import (
+	"fmt"
+	"os"
+
 	"github.com/cloudflare/xdpcap/internal"
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/perf"
 	"github.com/pkg/errors"
 	"golang.org/x/net/bpf"
+	"golang.org/x/sys/unix"
 )
 
 type packet struct {
@@ -85,13 +89,32 @@ func newFilterWithMap(hookMap *ebpf.Map, opts filterOpts) (*filter, error) {
 		actions:  opts.actions,
 	}
 
-	for _, action := range opts.actions {
-		program, err := newProgram(opts.filter, action, perfMap)
+	xdpFragsMode := false
+	for i, action := range opts.actions {
+		program, err := newProgram(opts.filter, action, perfMap, xdpFragsMode)
 		if err != nil {
 			return nil, errors.Wrapf(err, "loading filter program for %v", action)
 		}
 
 		err = attachProg(hookMap, program.program.FD(), action)
+		if errors.Is(err, unix.EINVAL) && i == 0 {
+			// attempt to load first action in XDP frags mode and retry attaching
+			// if this doesn't work then there is underlying issue that is not
+			// related to the hook being attached in XDP frags mode and we make
+			// sure to return the original attachment error.
+			xdpFragsMode = true
+
+			var programErr error
+			if program, programErr = newProgram(opts.filter, action, perfMap, xdpFragsMode); programErr != nil {
+				return nil, errors.Wrapf(programErr, "loading filter program in XDP frags mode for %v", action)
+			}
+
+			if attachProg(hookMap, program.program.FD(), action) == nil {
+				fmt.Fprintf(os.Stderr, "attaching filter actions in XDP frags mode\n")
+				err = nil
+			}
+		}
+
 		if err != nil {
 			// close and detach any previously successfully attached programs, but not this one
 			filter.close()
