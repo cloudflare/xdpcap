@@ -10,8 +10,8 @@
 // Once you have done so, you can capture into a file, or pipe
 // straight into tcpdump:
 //
-//     xdpcap /path/to/pinned/map file.pcap
-//     xdpcap /path/to/pinned/map - | tcpdump -r -
+//	xdpcap /path/to/pinned/map file.pcap
+//	xdpcap /path/to/pinned/map - | tcpdump -r -
 //
 // xdpcap supports tcpdump / libpcap-style filter expressions.
 package main
