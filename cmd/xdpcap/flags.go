@@ -99,7 +99,7 @@ func parseFilter(expr string, linkType layers.LinkType) ([]bpf.Instruction, erro
 
 // parsecBPF parses a string of cBPF 4 tuple instructions, formatted as:
 //
-//     <length>,<opcode> <jt> <jf> <k>,...
+//	<length>,<opcode> <jt> <jf> <k>,...
 func parsecBPF(bpfStr string) ([]bpf.Instruction, error) {
 	cbpf := strings.Split(strings.TrimSuffix(bpfStr, ","), ",")
 
@@ -130,7 +130,7 @@ func parsecBPF(bpfStr string) ([]bpf.Instruction, error) {
 
 // parseInstruction parses a cBPF instruction, formatted as:
 //
-//     <opcode> <jt> <jf> <k>
+//	<opcode> <jt> <jf> <k>
 func parseInstruction(insnStr string) (bpf.Instruction, error) {
 	fields := strings.Split(insnStr, " ")
 	if len(fields) != 4 {
