@@ -4,10 +4,20 @@
 #include <linux/bpf.h>
 
 /**
- * Create a bpf map suitable for use as an xdpcap hook point.
+ * If you are using libbpf >= 1.0.0 you need to define a map as follows:
+ * struct {
+ *   __uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
+ *   __uint(max_entries, 5);
+ *   __type(key, int);
+ *   __type(value, int);
+ * } xdpcap_hook __section(".maps");
  *
- * For example:
+ * If you are using a libbpf version < 1.0.0 then you can define a map
+ * like this:
  *   struct bpf_map_def xdpcap_hook = XDPCAP_HOOK();
+ *
+ * In either case the map should then be passed to the xdpcap_exit function
+ * to allow xdpcap to hook into the XDP entrypoint and dump the packets.
  */
 #define XDPCAP_HOOK() { \
 	.type = BPF_MAP_TYPE_PROG_ARRAY, \
