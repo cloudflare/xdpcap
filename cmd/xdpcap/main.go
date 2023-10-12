@@ -106,6 +106,8 @@ func capture(flags flags) error {
 
 	// Write out a pcap file from aggregated packets
 	go func() {
+		totalPackets := uint64(0)
+
 		for {
 			pkt, err := filter.read()
 			switch {
@@ -132,6 +134,13 @@ func capture(flags flags) error {
 				err = pcapWriter.Flush()
 				if err != nil {
 					fmt.Fprintln(os.Stderr, "Error flushing data:", err)
+				}
+			}
+
+			if flags.maxPackets != 0 {
+				totalPackets++
+				if totalPackets >= flags.maxPackets {
+					sigs <- syscall.SIGTERM
 				}
 			}
 		}

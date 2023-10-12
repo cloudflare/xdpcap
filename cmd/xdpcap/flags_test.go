@@ -136,7 +136,7 @@ func TestFilterRawInvalid(t *testing.T) {
 func TestOptions(t *testing.T) {
 	output := tempOutput(t)
 
-	flags, err := parseFlags("", []string{"-buffer", "1234", "-watermark", "5678", "-q", "-flush", "-actions", "pass,drop", "-linktype", "802.11", "foo", output})
+	flags, err := parseFlags("", []string{"-buffer", "1234", "-watermark", "5678", "-q", "-flush", "-actions", "pass,drop", "-linktype", "802.11", "-c", "1000", "foo", output})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -148,6 +148,7 @@ func TestOptions(t *testing.T) {
 	expected.flush = true
 	expected.filterOpts.actions = []xdpAction{xdpPass, xdpDrop}
 	expected.linkType = layers.LinkTypeIEEE802_11
+	expected.maxPackets = 1000
 
 	requireFlags(t, output, expected, flags)
 }
