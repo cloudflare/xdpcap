@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cilium/ebpf"
 	"github.com/cloudflare/xdpcap/internal"
 
 	"github.com/google/gopacket/layers"
@@ -17,18 +18,18 @@ import (
 func TestRequiredArgs(t *testing.T) {
 	output := tempOutput(t)
 
-	flags, err := parseFlags("", []string{})
+	_, err := parseFlags("", []string{})
 	if err == nil {
 		t.Fatal("missing main args")
 	}
 
-	flags, err = parseFlags("", []string{"foo"})
+	_, err = parseFlags("", []string{"foo"})
 	if err == nil {
 		t.Fatal("missing main args")
 	}
 
 	// Two args - empty filter
-	flags, err = parseFlags("", []string{"foo", output})
+	flags, err := parseFlags("", []string{"foo", output})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -253,12 +254,13 @@ func tempOutput(t *testing.T) string {
 
 func defaultFlags(mapPath string) flags {
 	return flags{
-		mapPath:    mapPath,
-		pcapFile:   nil,
-		quiet:      false,
-		flush:      false,
-		linkType:   layers.LinkTypeEthernet,
-		filterExpr: "",
+		mapPath:         mapPath,
+		pcapFile:        nil,
+		quiet:           false,
+		flush:           false,
+		linkType:        layers.LinkTypeEthernet,
+		filterExpr:      "",
+		verifierLogSize: ebpf.DefaultVerifierLogSize,
 		filterOpts: filterOpts{
 			perfPerCPUBuffer: 8192,
 			perfWatermark:    1,

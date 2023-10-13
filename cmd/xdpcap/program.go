@@ -43,7 +43,7 @@ type program struct {
 }
 
 // newProgram builds an eBPF program that copies packets matching a cBPF program to userspace via perf
-func newProgram(filter []bpf.Instruction, action xdpAction, perfMap *ebpf.Map, xdpFragsMode bool) (*program, error) {
+func newProgram(filter []bpf.Instruction, action xdpAction, perfMap *ebpf.Map, xdpFragsMode bool, opts ebpf.ProgramOptions) (*program, error) {
 	metricsMap, err := ebpf.NewMap(&metricsSpec)
 	if err != nil {
 		return nil, errors.Wrap(err, "creating metrics map")
@@ -172,7 +172,7 @@ func newProgram(filter []bpf.Instruction, action xdpAction, perfMap *ebpf.Map, x
 		progSpec.Flags = progSpec.Flags | unix.BPF_F_XDP_HAS_FRAGS
 	}
 
-	prog, err := ebpf.NewProgram(progSpec)
+	prog, err := ebpf.NewProgramWithOptions(progSpec, opts)
 	if err != nil {
 		return nil, errors.Wrap(err, "loading filter")
 	}

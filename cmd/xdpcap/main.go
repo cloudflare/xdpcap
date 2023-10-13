@@ -27,6 +27,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/cilium/ebpf"
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"github.com/google/gopacket/pcapgo"
@@ -48,7 +49,12 @@ func main() {
 
 	err = capture(flags)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "Error:", err)
+		var verifierErr *ebpf.VerifierError
+		if errors.As(err, &verifierErr) && flags.printVerifierLogs {
+			fmt.Printf("Verifier error: %+v\n", verifierErr)
+		} else {
+			fmt.Fprintln(os.Stderr, "Error:", err)
+		}
 		os.Exit(2)
 	}
 }
@@ -64,7 +70,12 @@ func capture(flags flags) error {
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
 
-	filter, err := newFilter(flags.mapPath, flags.filterOpts)
+	programOpts := ebpf.ProgramOptions{
+		LogSize:     flags.verifierLogSize,
+		LogDisabled: !flags.printVerifierLogs,
+		LogLevel:    ebpf.LogLevelInstruction,
+	}
+	filter, err := newFilter(flags.mapPath, flags.filterOpts, programOpts)
 	if err != nil {
 		return errors.Wrap(err, "creating filter")
 	}

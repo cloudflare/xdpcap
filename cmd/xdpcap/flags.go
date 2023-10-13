@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cilium/ebpf"
 	"github.com/cloudflare/xdpcap/internal"
 
 	"github.com/google/gopacket/layers"
@@ -181,6 +182,9 @@ type flags struct {
 	// Filter provided as input. Not in any particular format, for metadata / debugging only.
 	filterExpr string
 	filterOpts filterOpts
+
+	printVerifierLogs bool
+	verifierLogSize   int
 }
 
 // parseFlags creates the flags, and attempts to parse args.
@@ -198,6 +202,8 @@ func parseFlags(name string, args []string) (flags, error) {
 	flags.IntVar(&flags.filterOpts.perfWatermark, "watermark", 1, "Perf watermark (`bytes`). Must be < buffer.")
 	flags.BoolVar(&flags.quiet, "q", false, "Don't print statistics")
 	flags.BoolVar(&flags.flush, "flush", false, "Flush pcap data written to <output> for every packet received")
+	flags.BoolVar(&flags.printVerifierLogs, "print-verifier-logs", false, "If the verifier rejects the eBPF program, dump the logs")
+	flags.IntVar(&flags.verifierLogSize, "verifier-log-size", ebpf.DefaultVerifierLogSize, "Size of buffer to use for the verifier logs")
 
 	flags.filterOpts.actions = []xdpAction{}
 	flags.Var((*actionsFlag)(&flags.filterOpts.actions), "actions", fmt.Sprintf("XDP `actions` to capture packets for. Comma separated list of names (%v) or enum values (default all actions exposed by the <debug map>)", xdpActions))
