@@ -7,33 +7,47 @@ using standard tcpdump / libpcap filter expressions.
 
 ## Instrumentation
 
-XDP programs need to expose at least one hook point:
+XDP programs need to expose at least one hook point. The hook point uses
+a pinned map to copy packets to the userspace. Depending on the version
+of libbpf you are using you will need to define the map in different ways.
+In either case, the map must conform to the [ABI](https://github.com/cloudflare/xdpcap/blob/master/internal/abi.go).
+
+### Libbpf >= 1.0.0
+
+For versions of libbpf >= 1.0.0 a map should be defined simply as an anonymous
+struct:
 
 ```C
-struct bpf_map_def xdpcap_hook = {
-	.type = BPF_MAP_TYPE_PROG_ARRAY,
-	.key_size = sizeof(int),
-	.value_size = sizeof(int),
-	.max_entries = 4, // The max value of XDP_* constants
-};
+struct {
+  __uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
+  __uint(max_entries, 4);
+  __type(key, int);
+  __type(value, int);
+} xdpcap_hook SEC(".maps");
 ```
+
+### Libbpf < 1.0.0
+
+If you are using a libbpf version < 1.0.0 `hook.h` provides a convenience macro
+for declaring such maps:
+
+```
+#include "hook.h"
+
+struct bpf_map_def SEC("maps") xdpcap_hook = XDPCAP_HOOK();
+```
+
+### Using the map and the hook
 
 This map must be [pinned inside a bpffs](https://facebookmicrosites.github.io/bpf/blog/2018/08/31/object-lifetime.html#bpffs).
 
-`hook.h` provides a convenience macro for declaring such maps:
-
-```
-#include "hook.h"
-
-struct bpf_map_def xdpcap_hook = XDPCAP_HOOK();
-```
-
-`return XDP_*` statements should be modified to "feed" a hook:
+`hook.h` also provides a simple function call that can you use to modidy all
+statements like `return XDP_*`  to "feed" a hook:
 
 ```C
 #include "hook.h"
 
-struct bpf_map_def xdpcap_hook = XDPCAP_HOOK();
+/* xdpcap_hook map definition here */
 
 int xdp_main(struct xdp_md *ctx) {
 	return xdpcap_exit(ctx, &xdpcap_hook, XDP_PASS);
