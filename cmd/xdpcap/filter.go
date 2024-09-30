@@ -44,17 +44,17 @@ type filter struct {
 }
 
 // newFilter creates a filter from a tcpdump / libpcap filter expression
-func newFilter(hookMapPath string, opts filterOpts) (*filter, error) {
+func newFilter(hookMapPath string, opts filterOpts, programOpts ebpf.ProgramOptions) (*filter, error) {
 	hookMap, err := ebpf.LoadPinnedMap(hookMapPath, nil)
 	if err != nil {
 		return nil, errors.Wrapf(err, "loading hook map")
 	}
 
-	return newFilterWithMap(hookMap, opts)
+	return newFilterWithMap(hookMap, opts, programOpts)
 }
 
 // newFilterWithMap creates a filter from a tcpdump / libpcap filter expression
-func newFilterWithMap(hookMap *ebpf.Map, opts filterOpts) (*filter, error) {
+func newFilterWithMap(hookMap *ebpf.Map, opts filterOpts, programOpts ebpf.ProgramOptions) (*filter, error) {
 	if len(opts.filter) == 0 {
 		return nil, errors.New("at least one filter cBPF instruction required")
 	}
@@ -91,7 +91,7 @@ func newFilterWithMap(hookMap *ebpf.Map, opts filterOpts) (*filter, error) {
 
 	xdpFragsMode := false
 	for i, action := range opts.actions {
-		program, err := newProgram(opts.filter, action, perfMap, xdpFragsMode)
+		program, err := newProgram(opts.filter, action, perfMap, xdpFragsMode, programOpts)
 		if err != nil {
 			return nil, errors.Wrapf(err, "loading filter program for %v", action)
 		}
@@ -105,7 +105,7 @@ func newFilterWithMap(hookMap *ebpf.Map, opts filterOpts) (*filter, error) {
 			xdpFragsMode = true
 
 			var programErr error
-			if program, programErr = newProgram(opts.filter, action, perfMap, xdpFragsMode); programErr != nil {
+			if program, programErr = newProgram(opts.filter, action, perfMap, xdpFragsMode, programOpts); programErr != nil {
 				return nil, errors.Wrapf(programErr, "loading filter program in XDP frags mode for %v", action)
 			}
 
@@ -145,7 +145,6 @@ func attachProg(hookMap *ebpf.Map, fd int, action xdpAction) error {
 	if err != nil {
 		return errors.Wrap(err, "attaching filter programs")
 	}
-
 	return nil
 }
 
