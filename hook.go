@@ -21,7 +21,10 @@ type Hook struct {
 // fileName must be inside a bpffs
 func NewHook(fileName string) (*Hook, error) {
 	spec := internal.HookMapSpec.Copy()
-	spec.Name = ebpf.SanitizeName(filepath.Base(fileName), '_')
+	// Since cilium/ebpf v0.20.0, ebpf.SanitizeName was unexported: map and
+	// program names are now always sanitized automatically when they're
+	// loaded into the kernel, so there's no need to do it ourselves here.
+	spec.Name = filepath.Base(fileName)
 
 	hookMap, err := ebpf.NewMap(spec)
 	if err != nil {
