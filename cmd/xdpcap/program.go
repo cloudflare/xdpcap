@@ -115,7 +115,7 @@ func newProgram(filter []bpf.Instruction, action xdpAction, perfMap *ebpf.Map, x
 
 	insns = append(insns,
 		// Packet didn't match filter
-		asm.JEq.Imm(asm.R2, 0, exit).Sym(result),
+		asm.JEq.Imm(asm.R2, 0, exit).WithSymbol(result),
 
 		// Matched packets
 		asm.LoadMem(asm.R0, asm.R7, int16(8*matchedPackets), asm.DWord),
@@ -139,7 +139,9 @@ func newProgram(filter []bpf.Instruction, action xdpAction, perfMap *ebpf.Map, x
 		asm.StoreMem(asm.R4, 0, asm.R8, asm.DWord),
 		//   <u64 action>
 		asm.Add.Imm(asm.R4, -8),
-		asm.StoreImm(asm.R4, 0, int64(action), asm.DWord),
+		// cilium/ebpf doesn't let us do a StoreMem(DWord) anymore: https://github.com/cilium/ebpf/pull/2066
+		asm.Mov.Imm(asm.R0, int32(action)),
+		asm.StoreMem(asm.R4, 0, asm.R0, asm.DWord),
 		// sizeof(data)
 		asm.Mov.Imm(asm.R5, 2*8),
 		// call
@@ -158,7 +160,7 @@ func newProgram(filter []bpf.Instruction, action xdpAction, perfMap *ebpf.Map, x
 
 	// Exit with original action - always referred to
 	insns = append(insns,
-		asm.Mov.Imm(asm.R0, int32(action)).Sym(exit),
+		asm.Mov.Imm(asm.R0, int32(action)).WithSymbol(exit),
 		asm.Return(),
 	)
 
