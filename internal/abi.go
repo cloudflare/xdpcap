@@ -10,7 +10,7 @@ var HookMapSpec = &ebpf.MapSpec{
 	Type:       ebpf.ProgramArray,
 	KeySize:    4, // sizeof(int)
 	ValueSize:  4, // sizeof(int)
-	MaxEntries: 4, // current number of XDP actions
+	MaxEntries: 5, // current number of XDP actions
 }
 
 // CheckHookMap checks the given map against HookMapABI to have appropriate values
