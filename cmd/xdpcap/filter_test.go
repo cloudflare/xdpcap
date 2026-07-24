@@ -77,7 +77,8 @@ func TestFilterProgramForAllModes(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			_, err = entrypoint.Run(&ebpf.RunOptions{})
+			// Need at least ETH_HLEN or we get EINVAL.
+			_, err = entrypoint.Run(&ebpf.RunOptions{Data: make([]byte, 14)})
 			if err != nil {
 				t.Fatal(err)
 			}
