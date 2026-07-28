@@ -2,7 +2,7 @@ module github.com/cloudflare/xdpcap
 
 require (
 	github.com/cilium/ebpf v0.22.0
-	github.com/cloudflare/cbpfc v0.0.0-20221017140110-11acb56438a2
+	github.com/cloudflare/cbpfc v0.0.0-20260723100431-d17020eb3591
 	github.com/google/gopacket v1.1.19
 	github.com/pkg/errors v0.9.1
 	golang.org/x/net v0.57.0
